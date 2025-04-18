@@ -1,0 +1,13 @@
+source:
+  type: "dbt"
+  config:
+    manifest_path: "/dbt_artifacts/manifest.json"
+    catalog_path: "/dbt_artifacts/catalog.json"
+    run_results_paths:
+      - "/dbt_artifacts/run_results.json"
+    target_platform: "redshift"
+sink:
+  type: datahub-rest
+  config:
+    server: "http://datahub-gms:8080"
+
