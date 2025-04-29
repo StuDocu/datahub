@@ -8,7 +8,7 @@ on:
 # Permissions for OIDC
 permissions:
   id-token: write
-  contents:   read
+  contents: read
 
 # AWS region
 env:
@@ -26,7 +26,6 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          # Replace this ARN with your GitHub-OIDC deploy role
           role-to-assume: arn:aws:iam::123456789012:role/GitHubDeployRole
           aws-region: ${{ env.AWS_REGION }}
 
@@ -40,6 +39,6 @@ jobs:
               "git pull origin main",
               "docker-compose -p datahub pull",
               "docker-compose -p datahub up -d"
-            ] \
+            ] 
             --comment "GitHub Actions deploy of DataHub" \
-            --timeout-seconds 600
+            --timeout-seconds 700
