@@ -27,7 +27,8 @@ jobs:
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::123456789012:role/GitHubDeployRole
+          role-to-assume:  arn:aws:iam::179143349265:role/studocu-events-oidc-github-action
+          role-session-name: "studocu-datahub-oidc-github-actions"
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Deploy to EC2 via SSM
