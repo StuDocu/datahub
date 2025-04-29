@@ -40,6 +40,6 @@ jobs:
               "git pull origin main",
               "docker-compose -p datahub pull",
               "docker-compose -p datahub up -d"
-            ] \
+            ] 
             --comment "GitHub Actions deploy of DataHub" \
-            --timeout-seconds 600
+            --timeout-seconds 700
