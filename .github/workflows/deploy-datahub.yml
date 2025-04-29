@@ -58,4 +58,4 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --command-id "${{ steps.send.outputs.command_id }}" \
             --instance-id "$INSTANCE_ID" \
-            --details
+            --output text
