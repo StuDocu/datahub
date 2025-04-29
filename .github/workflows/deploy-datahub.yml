@@ -54,8 +54,10 @@ jobs:
             --region ${{ env.AWS_REGION }} \
             --filters "Key=tag:Name,Values=production-datahub-server" \
             --query "InstanceInformationList[0].InstanceId" --output text)
+          
           aws ssm get-command-invocation \
             --region ${{ env.AWS_REGION }} \
             --command-id "${{ steps.send.outputs.command_id }}" \
             --instance-id "$INSTANCE_ID" \
+            --query '{stderr:StandardErrorContent, stdout:StandardOutputContent}' \
             --output text
