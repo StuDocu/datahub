@@ -35,7 +35,15 @@ jobs:
         run: |
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
-            --targets "Key=tag:Name,Values=DataHubServer" \
-            --parameters '{"commands":["cd datahub","git pull origin main","docker-compose -p datahub pull","docker-compose -p datahub up -d"]}' \
+            --targets "Key=tag:Name,Values=production-datahub-server" \
+            --parameters '{
+              "commands": [
+                "cd datahub",
+                "git pull origin main",
+                "cd docker",
+                "docker-compose -p datahub pull",
+                "docker-compose -p datahub up -d"
+              ]
+            }' \
             --comment "GitHub Actions deploy of DataHub" \
             --timeout-seconds 700
