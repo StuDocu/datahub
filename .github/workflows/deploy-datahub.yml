@@ -6,17 +6,16 @@ on:
       - main
   workflow_dispatch:
 
-# Permissions for OIDC
 permissions:
   id-token: write
   contents: read
 
-# AWS region
 env:
   AWS_REGION: eu-west-1
 
 jobs:
   deploy:
+    name: Deploy DataHub via OIDC + SSM
     runs-on: ubuntu-latest
 
     steps:
@@ -27,7 +26,8 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::179143349265:role/datahub-oidc-github-actions
-          aws-region: eu-west-1
+          role-session-name: "datahub-oidc-github-actions-${{ github.run_id }}"
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Execute commands via SSM
         id: execute_command
@@ -36,7 +36,7 @@ jobs:
             --document-name AWS-RunShellScript \
             --targets "Key=tag:Name,Values=production-datahub-server" \
             --parameters '{
-              "commands":[
+              "commands": [
                 "cd datahub",
                 "git pull origin main",
                 "cd docker",
@@ -45,17 +45,28 @@ jobs:
               ]
             }' \
             --comment "Deploying DataHub" \
+            --timeout-seconds 700 \
             --query "Command.CommandId" \
             --output text)
           echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
 
       - name: Wait for SSM command to finish
-        run: sleep 15
+        run: |
+          echo "Waiting 15s for command to execute…"
+          sleep 15
 
       - name: Fetch SSM command output
         run: |
-          aws ssm list-command-invocations \
+          INSTANCE_ID=$(aws ssm describe-instance-information \
+            --region ${{ env.AWS_REGION }} \
+            --filters "Key=tag:Name,Values=production-datahub-server" \
+            --query "InstanceInformationList[0].InstanceId" \
+            --output text)
+
+          echo "Fetching stdout/stderr for command ${{ steps.execute_command.outputs.command_id }} on instance $INSTANCE_ID…"
+          aws ssm get-command-invocation \
+            --region ${{ env.AWS_REGION }} \
             --command-id "${{ steps.execute_command.outputs.command_id }}" \
-            --details \
-            --query "CommandInvocations[].CommandPlugins[].{Status:Status,Stdout:Output,Stderr:ErrorOutput}" \
-            --output table
+            --instance-id "$INSTANCE_ID" \
+            --query '{stdout:StandardOutputContent, stderr:StandardErrorContent}' \
+            --output text
