@@ -22,10 +22,10 @@ jobs:
 
     steps:
       - name: Check out repository (for logs/reference)
-        uses: actions/checkout@v4
+        uses: workflows/checkout@v4
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-workflows/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::123456789012:role/GitHubDeployRole
           aws-region: ${{ env.AWS_REGION }}
