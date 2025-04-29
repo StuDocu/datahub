@@ -1,0 +1,45 @@
+name: Deploy DataHub
+
+on:
+  push:
+    branches:
+      - main
+
+# Permissions for OIDC
+permissions:
+  id-token: write
+  contents:   read
+
+# AWS region
+env:
+  AWS_REGION: eu-west-1
+
+jobs:
+  deploy:
+    name: Deploy DataHub via OIDC + SSM
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository (for logs/reference)
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # Replace this ARN with your GitHub-OIDC deploy role
+          role-to-assume: arn:aws:iam::123456789012:role/GitHubDeployRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Deploy to EC2 via SSM
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=DataHubServer" \
+            --parameters commands=[
+              "cd datahub",
+              "git pull origin main",
+              "docker-compose -p datahub pull",
+              "docker-compose -p datahub up -d"
+            ] \
+            --comment "GitHub Actions deploy of DataHub" \
+            --timeout-seconds 600
