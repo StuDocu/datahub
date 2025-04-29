@@ -31,33 +31,38 @@ jobs:
           role-session-name: "datahub-oidc-github-actions-${{ github.run_id }}"
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Deploy to EC2 via SSM
-        id: send
+      - name: Execute commands via SSM
+        id: execute_command
         run: |
+          INSTANCE_ID="${{ secrets.AWS_INSTANCE_ID }}"
+          
           COMMAND_ID=$(aws ssm send-command \
-          --document-name AWS-RunShellScript \
-          --targets "Key=tag:Name,Values=production-datahub-server" \
-          --parameters '{"commands":["cd datahub","git pull origin main","cd docker","docker-compose -p datahub pull","docker-compose -p datahub up -d"]}' \
-          --comment "GitHub Actions deploy of DataHub" \
-          --timeout-seconds 700 \
-          --query "Command.CommandId" --output text)
+          --instance-ids "$INSTANCE_ID" \
+          --document-name "AWS-RunShellScript" \
+          --parameters 'commands=[
+           "cd datahub",
+           "git pull origin main",
+           "cd docker",
+           "docker-compose -p datahub pull",
+           "docker-compose -p datahub up -d"
+          ]' \
+          --comment "Deploying DataHub" \
+          --query "Command.CommandId" \
+          --output text)
+          
           echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
 
       - name: Wait for SSM command to finish
-        run: |
-          echo "Waiting 15s for command to run…"
-          sleep 15
+        run: sleep 15
 
-      - name: Fetch SSM command output
+      - name: Output execution via SSM
         run: |
-          INSTANCE_ID=$(aws ssm describe-instance-information \
-            --region ${{ env.AWS_REGION }} \
-            --filters "Key=tag:Name,Values=production-datahub-server" \
-            --query "InstanceInformationList[0].InstanceId" --output text)
+          INSTANCE_ID="${{ secrets.AWS_INSTANCE_ID }}"
+          COMMAND_ID="${{ steps.execute_command.outputs.command_id }}"
           
-          aws ssm get-command-invocation \
-            --region ${{ env.AWS_REGION }} \
-            --command-id "${{ steps.send.outputs.command_id }}" \
+          aws ssm list-command-invocations \
+            --command-id "$COMMAND_ID" \
+            --details \
             --instance-id "$INSTANCE_ID" \
-            --query '{stderr:StandardErrorContent, stdout:StandardOutputContent}' \
-            --output text
+            --query "CommandInvocations[].CommandPlugins[].{Status:Status,Stdout:Output,Stderr:ErrorOutput}" \
+            --output table
