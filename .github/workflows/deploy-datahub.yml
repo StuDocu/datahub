@@ -30,18 +30,18 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --comment "GitHub → SSM deploy" \
             --targets "Key=tag:Name,Values=production-datahub-server" \
-            --parameters 'commands=[
-              "# --- Deployment Script ---",
-              "cd /home/ubuntu/datahub || exit 1",
-              "git pull origin main",
-              "cd docker || exit 1",
-              "docker-compose -p datahub pull",
-              "docker-compose -p datahub up -d",
-              "# --- End Deployment Script ---"
-            ]' \
+            --parameters \
+              commands="export HOME=/home/ubuntu" \
+              commands="git config --global --add safe.directory /home/ubuntu/datahub" \
+              commands="cd /home/ubuntu/datahub || exit 1" \
+              commands="git pull origin main" \
+              commands="cd docker || exit 1" \
+              commands="docker-compose -p datahub pull" \
+              commands="docker-compose -p datahub up -d" \
             --timeout-seconds 600 \
             --query "Command.CommandId" \
             --output text)
+          
           echo "cmd_id=$CMD_ID" >> $GITHUB_OUTPUT
 
       - name: Get instance ID by Name tag
@@ -55,7 +55,7 @@ jobs:
 
       - name: Wait & fetch SSM output
         run: |
-          # 1) Poll until the command leaves Pending/InProgress (ignore initial errors)
+          # 1) Poll until it completes (suppress initial errors)
           while true; do
             STATUS=$(aws ssm get-command-invocation \
               --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
@@ -67,17 +67,28 @@ jobs:
             fi
             sleep 5
           done
-
+          
           # 2) Print stdout & stderr
           echo "----- STDOUT -----"
           aws ssm get-command-invocation \
             --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
             --instance-id ${{ steps.find_instance.outputs.instance_id }} \
             --query 'StandardOutputContent' --output text
-
+          
           echo "----- STDERR -----"
           aws ssm get-command-invocation \
             --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
             --instance-id ${{ steps.find_instance.outputs.instance_id }} \
             --query 'StandardErrorContent' --output text
+          
+          # 3) Check the exit code of the remote script
+          RESPONSE_CODE=$(aws ssm get-command-invocation \
+            --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
+            --instance-id ${{ steps.find_instance.outputs.instance_id }} \
+            --query 'ResponseCode' --output text)
+          echo "Remote exit code: $RESPONSE_CODE"
+          if [[ "$RESPONSE_CODE" != "0" ]]; then
+            echo "::error::Remote deployment failed with exit code $RESPONSE_CODE"
+            exit $RESPONSE_CODE
+          fi
         shell: bash
