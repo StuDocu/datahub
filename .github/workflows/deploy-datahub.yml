@@ -30,7 +30,15 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --comment "GitHub → SSM deploy" \
             --targets "Key=tag:Name,Values=production-datahub-server" \
-            --parameters 'commands=["# --- Deployment Script ---","# Change to the application directory, exit if it fails","cd /home/ubuntu/datahub || exit 1","# Pull the latest code from the main branch","git pull origin main","# Change to the docker directory, exit if it fails","cd docker || exit 1","# Pull the latest Docker images defined in docker-compose","docker-compose -p datahub pull","# Start the services in detached mode using docker-compose","docker-compose -p datahub up -d","# --- End Deployment Script ---"]' \
+            --parameters 'commands=[
+              "# --- Deployment Script ---",
+              "cd datahub || exit 1",
+              "git pull origin main",
+              "cd docker || exit 1",
+              "docker-compose -p datahub pull",
+              "docker-compose -p datahub up -d",
+              "# --- End Deployment Script ---"
+            ]' \
             --timeout-seconds 600 \
             --query "Command.CommandId" \
             --output text)
