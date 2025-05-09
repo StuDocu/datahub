@@ -24,53 +24,49 @@ jobs:
       - name: Send SSM deploy command
         id: send_ssm
         run: |
-          # 1) Send the command and grab the CommandId
           CMD_ID=$(aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --comment "GitHub → SSM deploy" \
-            --targets "Key=tag:Name,Values=production-datahub-server" \
-            --parameters commands='[
-              "# --- Deployment Script ---",
-              "cd /home/ubuntu/datahub || exit 1",
-              "git pull origin main",
-              "cd docker || exit 1",
-              "docker-compose -p datahub pull",
-              "docker-compose -p datahub up -d"
-            ]' \
-            --timeout-seconds 600 \
-            --query "Command.CommandId" \
-            --output text)
-
+          --document-name "AWS-RunShellScript" \
+          --comment "GitHub → SSM deploy" \
+          --targets "Key=tag:Name,Values=production-datahub-server" \
+          --parameters 'commands=["# --- Deployment Script ---","# Change to the application directory, exit if it fails","cd /home/ubuntu/datahub || exit 1","# Pull the latest code from the main branch","git pull origin main","# Change to the docker directory, exit if it fails","cd docker || exit 1","# Pull the latest Docker images defined in docker-compose","docker-compose -p datahub pull","# Start the services in detached mode using docker-compose","docker-compose -p datahub up -d","# --- End Deployment Script ---"]' \
+          --timeout-seconds 600 \
+          --query "Command.CommandId" \
+          --output text)
           echo "cmd_id=$CMD_ID" >> $GITHUB_OUTPUT
 
-      - name: Get instance ID by Name tag
-        id: find_instance
-        run: |
-          INSTANCE_ID=$(aws ec2 describe-instances \
-            --filters "Name=tag:Name,Values=production-datahub-server" \
-            --query "Reservations[0].Instances[0].InstanceId" \
-            --output text)
-          echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
+          - name: Get instance ID by Name tag
+            id: find_instance
+            run: |
+              INSTANCE_ID=$(aws ec2 describe-instances \
+                --filters "Name=tag:Name,Values=production-datahub-server" \
+                --query "Reservations[0].Instances[0].InstanceId" \
+                --output text)
+              echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
 
-      - name: Wait for command to finish & print output
-        run: |
-          # 2) Poll until it’s in Success/Failed/TimedOut
-          while true; do
-            STATUS=$(aws ssm get-command-invocation \
-              --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
-              --instance-id ${{ steps.find_instance.outputs.instance_id }} \
-              --query "Status" --output text)
-            echo "Current Status: $STATUS"
-            if [[ "$STATUS" != "InProgress" && "$STATUS" != "Pending" ]]; then
-              break
-            fi
-            sleep 5
-          done
-
-          # 3) Fetch and print the logs
-          aws ssm get-command-invocation \
-            --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
-            --instance-id ${{ steps.find_instance.outputs.instance_id }} \
-            --plugin-name aws:RunShellScript \
-            --output text \
-            --query "StandardOutputContent,StandardErrorContent"
+          - name: Wait & fetch SSM output
+            run: |
+              # Poll until the command completes (ignore initial 404)
+              while true; do
+                STATUS=$(aws ssm get-command-invocation \
+                  --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
+                  --instance-id ${{ steps.find_instance.outputs.instance_id }} \
+                  --query 'Status' --output text 2>/dev/null) || STATUS="Pending"
+                echo "Status: $STATUS"
+                if [[ "$STATUS" != "Pending" && "$STATUS" != "InProgress" ]]; then
+                  break
+                fi
+                sleep 5
+              done
+              
+              echo "----- STDOUT -----"
+              aws ssm get-command-invocation \
+                --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
+                --instance-id ${{ steps.find_instance.outputs.instance_id }} \
+                --query 'StandardOutputContent' --output text
+              
+              echo "----- STDERR -----"
+              aws ssm get-command-invocation \
+                --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
+                --instance-id ${{ steps.find_instance.outputs.instance_id }} \
+                --query 'StandardErrorContent' --output text
+            shell: bash
