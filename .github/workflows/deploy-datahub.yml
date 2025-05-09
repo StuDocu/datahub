@@ -1,160 +1,76 @@
-# Workflow Name
 name: Deploy DataHub
-
-# Triggers: Run on push to main or manually
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   workflow_dispatch:
 
-# Permissions needed for OIDC and checkout
 permissions:
-  id-token: write # Required for AWS OIDC authentication
-  contents: read  # Required to check out the repository
+  id-token: write
+  contents: read
 
-# Environment variables
 env:
-  AWS_REGION: eu-west-1 # Specify your AWS region
+  AWS_REGION: eu-west-1
 
 jobs:
   deploy:
-    name: Deploy DataHub via OIDC + SSM
-    runs-on: ubuntu-latest # Use the latest Ubuntu runner
-
+    runs-on: ubuntu-latest
     steps:
-      # Step 1: Check out the repository code
-      - name: Check out repository
-        uses: actions/checkout@v4
-
-      # Step 2: Configure AWS credentials using OIDC
-      - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          # ARN of the IAM role created in AWS that trusts GitHub's OIDC provider
-          role-to-assume: arn:aws:iam::179143349265:role/datahub-oidc-github-actions
-          # A descriptive name for the assumed role session
-          role-session-name: "datahub-oidc-github-actions-${{ github.run_id }}"
-          # AWS region where the resources are located
-          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region:    ${{ secrets.AWS_REGION }}
 
-      # Step 3: Send the deployment commands via SSM SendCommand (asynchronous)
-      - name: Execute commands via SSM
-        id: execute_command
+      - name: Send SSM deploy command
+        id: send_ssm
         run: |
-          echo "Sending deployment commands to instance tagged Name=production-datahub-server..."
-          # Use AWS CLI to send shell script commands to the target EC2 instance(s)
-          COMMAND_ID=$(aws ssm send-command \
-            --region ${{ env.AWS_REGION }} \
-            --document-name AWS-RunShellScript \
+          # 1) Send the command and grab the CommandId
+          CMD_ID=$(aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --comment "GitHub → SSM deploy" \
             --targets "Key=tag:Name,Values=production-datahub-server" \
-            --parameters '{
-              "commands": [
-                "# --- Deployment Script ---",
-                "# Change to the application directory, exit if it fails",
-                "cd /home/ubuntu/datahub || exit 1",
-                "# Pull the latest code from the main branch",
-                "git pull origin main",
-                "# Change to the docker directory, exit if it fails",
-                "cd docker || exit 1",
-                "# Pull the latest Docker images defined in docker-compose",
-                "docker-compose -p datahub pull",
-                "# Start the services in detached mode using docker-compose",
-                "docker-compose -p datahub up -d",
-                "# --- End Deployment Script ---"
-              ]
-            }' \
-            --comment "Deploying DataHub from GitHub Actions Run ${{ github.run_id }}" \
-            --timeout-seconds 700 \
+            --parameters commands='[
+              "# --- Deployment Script ---",
+              "cd /home/ubuntu/datahub || exit 1",
+              "git pull origin main",
+              "cd docker || exit 1",
+              "docker-compose -p datahub pull",
+              "docker-compose -p datahub up -d"
+            ]' \
+            --timeout-seconds 600 \
             --query "Command.CommandId" \
             --output text)
 
-          # Check if COMMAND_ID was successfully captured
-          if [[ -z "$COMMAND_ID" ]]; then
-            echo "::error::Failed to get Command ID from aws ssm send-command."
-            exit 1
-          fi
+          echo "cmd_id=$CMD_ID" >> $GITHUB_OUTPUT
 
-          # Output the Command ID for the next step
-          echo "command_id=$COMMAND_ID" >> $GITHUB_OUTPUT
-          echo "SSM Command ID: $COMMAND_ID initiated."
-
-      # Step 4: Wait for the SSM command to complete by polling its status
-      - name: Wait for SSM command to complete
+      - name: Get instance ID by Name tag
+        id: find_instance
         run: |
-          COMMAND_ID="${{ steps.execute_command.outputs.command_id }}"
-          echo "Waiting for command $COMMAND_ID to complete..."
-          # Define polling parameters
-          MAX_ATTEMPTS=40  # ~10 minutes total timeout (40 attempts * 15s interval)
-          SLEEP_INTERVAL=15 # Check status every 15 seconds
+          INSTANCE_ID=$(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=production-datahub-server" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+          echo "instance_id=$INSTANCE_ID" >> $GITHUB_OUTPUT
 
-          for ((attempt=1; attempt<=MAX_ATTEMPTS; attempt++)); do
-            # Get the command invocation status
-            # Using list-command-invocations as it only requires command_id
-            STATUS=$(aws ssm list-command-invocations \
-              --region ${{ env.AWS_REGION }} \
-              --command-id "$COMMAND_ID" \
-              --details \
-              --query "CommandInvocations[0].Status" \
-              --output text)
-
-            # Check for API errors (e.g., if status is empty)
-            if [[ -z "$STATUS" ]]; then
-               echo "::warning::Could not retrieve command status on attempt $attempt. Retrying..."
-               sleep $SLEEP_INTERVAL
-               continue
+      - name: Wait for command to finish & print output
+        run: |
+          # 2) Poll until it’s in Success/Failed/TimedOut
+          while true; do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
+              --instance-id ${{ steps.find_instance.outputs.instance_id }} \
+              --query "Status" --output text)
+            echo "Current Status: $STATUS"
+            if [[ "$STATUS" != "InProgress" && "$STATUS" != "Pending" ]]; then
+              break
             fi
-
-            echo "Attempt $attempt/$MAX_ATTEMPTS: Command status is '$STATUS'"
-
-            # Check for terminal states
-            if [[ "$STATUS" == "Success" ]]; then
-              echo "Command completed successfully."
-              exit 0 # Exit with success code
-            elif [[ "$STATUS" == "Failed" || "$STATUS" == "Cancelled" || "$STATUS" == "TimedOut" || "$STATUS" == "Cancelling" ]]; then
-              echo "::error::Command failed or was terminated with status: $STATUS."
-              # Attempt to fetch logs on failure for immediate feedback
-              echo "Attempting to fetch logs for failed command..."
-              INSTANCE_ID=$(aws ssm describe-instance-information --region ${{ env.AWS_REGION }} --filters "Key=tag:Name,Values=production-datahub-server" --query "InstanceInformationList[0].InstanceId" --output text || echo "UNKNOWN_INSTANCE")
-              if [[ "$INSTANCE_ID" != "UNKNOWN_INSTANCE" ]]; then
-                 aws ssm get-command-invocation --region ${{ env.AWS_REGION }} --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query '{stdout:StandardOutputContent, stderr:StandardErrorContent}' --output json
-              else
-                 echo "Could not determine instance ID to fetch logs."
-              fi
-              exit 1 # Exit with failure code
-            fi # Status is Pending or InProgress, continue waiting
-
-            # Wait before the next poll
-            sleep $SLEEP_INTERVAL
+            sleep 5
           done
 
-          # If loop finishes, it means MAX_ATTEMPTS were reached without success
-          echo "::error::Command timed out after $MAX_ATTEMPTS attempts."
-          exit 1 # Exit with failure code
-
-      # Step 5: Fetch the SSM command output (stdout/stderr) - runs only if Wait step succeeded
-      - name: Fetch SSM command output (on success)
-        run: |
-          COMMAND_ID="${{ steps.execute_command.outputs.command_id }}"
-          # Get the instance ID (assuming only one instance matches the tag)
-          INSTANCE_ID=$(aws ssm describe-instance-information \
-            --region ${{ env.AWS_REGION }} \
-            --filters "Key=tag:Name,Values=production-datahub-server" \
-            --query "InstanceInformationList[0].InstanceId" \
-            --output text)
-
-          if [[ -z "$INSTANCE_ID" ]]; then
-            echo "::error::Could not determine instance ID for fetching output."
-            exit 1
-          fi
-
-          echo "Fetching stdout/stderr for command $COMMAND_ID on instance $INSTANCE_ID..."
-          # Get the standard output and standard error from the command execution
+          # 3) Fetch and print the logs
           aws ssm get-command-invocation \
-            --region ${{ env.AWS_REGION }} \
-            --command-id "$COMMAND_ID" \
-            --instance-id "$INSTANCE_ID" \
-            --query '{stdout:StandardOutputContent, stderr:StandardErrorContent}' \
-            --output json # Output as JSON for potentially easier parsing, or use 'text' for raw logs
-
-          echo "Command output fetched."
+            --command-id ${{ steps.send_ssm.outputs.cmd_id }} \
+            --instance-id ${{ steps.find_instance.outputs.instance_id }} \
+            --plugin-name aws:RunShellScript \
+            --output text \
+            --query "StandardOutputContent,StandardErrorContent"
