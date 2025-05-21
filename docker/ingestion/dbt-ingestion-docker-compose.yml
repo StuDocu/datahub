@@ -1,0 +1,16 @@
+version: '3'
+services:
+  ingestion:
+    build:
+      context: ../../
+      dockerfile: docker/datahub-ingestion/Dockerfile
+    image: acryldata/datahub-ingestion:${DATAHUB_VERSION:-head}
+    hostname: ingestion
+    command: "ingest -c /dbt_recipe.yml"
+    volumes:
+      - ./dbt_recipe.yml:/dbt_recipe.yml:ro
+      - ./dbt_artifacts:/dbt_artifacts
+networks:
+  default:
+    external: true
+    name: datahub_network

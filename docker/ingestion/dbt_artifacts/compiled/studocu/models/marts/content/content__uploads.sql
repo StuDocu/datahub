@@ -1,0 +1,45 @@
+SELECT
+    published_at,
+    verified_user,
+    utm_source,
+    country_id,
+    country_name,
+    geocode,
+    country_tier,
+    institution_id,
+    institution_name,
+    institution_stage,
+    course_id,
+    course_name,
+    category_name,
+    document_acquisition_type,
+    number_of_uploaded_documents,
+    inbound_documents,
+    studocu_rejected_documents,
+    user_rejected_documents,
+    approved_documents
+FROM
+    "production"."intermediate"."int_content__paid_uploads"
+UNION
+SELECT
+    published_at,
+    verified_user,
+    utm_source,
+    country_id,
+    country_name,
+    geocode,
+    country_tier,
+    institution_id,
+    institution_name,
+    institution_stage,
+    course_id,
+    course_name,
+    category_name,
+    document_acquisition_type,
+    number_of_uploaded_documents,
+    inbound_documents,
+    studocu_rejected_documents,
+    user_rejected_documents,
+    approved_documents
+FROM
+    "production"."intermediate"."int_content__organic_uploads"
