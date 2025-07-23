@@ -54,6 +54,8 @@ services:
       datahub-gms:
         condition: service_healthy
     environment:
+    - AUTH_OIDC_CLIENT_ID=${CLIENT_ID}
+    - AUTH_OIDC_CLIENT_SECRET=${CLIENT_SECRET}
     - DATAHUB_GMS_HOST=datahub-gms
     - DATAHUB_GMS_PORT=8080
     - DATAHUB_SECRET=${CLIENT_SECRET}
@@ -64,6 +66,8 @@ services:
     - DATAHUB_TRACKING_TOPIC=DataHubUsageEvent_v1
     - ELASTIC_CLIENT_HOST=elasticsearch
     - ELASTIC_CLIENT_PORT=9200
+    env_file:
+      - ./env/datahub-frontend-react.env
     hostname: datahub-frontend-react
     image: ${DATAHUB_FRONTEND_IMAGE:-acryldata/datahub-frontend-react}:${DATAHUB_VERSION:-head}
     ports:
@@ -103,8 +107,6 @@ services:
     - SHOW_ACCESS_MANAGEMENT=true
     - THEME_V2_DEFAULT=true
     - UI_INGESTION_ENABLED=true
-    env_file:
-      - ./datahub-frontend-react.env
     healthcheck:
       interval: 1s
       retries: 3

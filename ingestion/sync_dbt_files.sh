@@ -20,8 +20,3 @@ echo "Sync complete. dbt artifacts are now available in $LOCAL_DIR."
 
 CATALOG_PARQUET="$LOCAL_DIR/catalog.json"
 MANIFEST_PARQUET="$LOCAL_DIR/manifest.json"
-
-# --- Spin up Container using docker-compose ---
-echo "Spinning up container using dbt-ingestion-docker-compose.yml..."
-docker-compose -f dbt-ingestion-docker-compose.yml up -d
-echo "Container has been spun up successfully."
