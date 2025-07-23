@@ -86,6 +86,7 @@ smoke-test/rollback-reports
 coverage*.xml
 .vercel
 .envrc
+.env
 
 # A long series of binary directories we should ignore
 datahub-frontend/bin/main/
