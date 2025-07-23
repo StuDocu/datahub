@@ -54,8 +54,8 @@ services:
       datahub-gms:
         condition: service_healthy
     environment:
-    - AUTH_OIDC_CLIENT_ID=${CLIENT_ID}
-    - AUTH_OIDC_CLIENT_SECRET=${CLIENT_SECRET}
+    - AUTH_OIDC_CLIENT_ID=${AUTH_OIDC_CLIENT_ID}
+    - AUTH_OIDC_CLIENT_SECRET=${AUTH_OIDC_CLIENT_SECRET}
     - DATAHUB_GMS_HOST=datahub-gms
     - DATAHUB_GMS_PORT=8080
     - DATAHUB_SECRET=${CLIENT_SECRET}
@@ -74,12 +74,14 @@ services:
     - ${DATAHUB_MAPPED_FRONTEND_PORT:-9002}:9002
     volumes:
     - ${HOME}/.datahub/plugins:/etc/datahub/plugins
+    - ./env/user.props:/datahub-frontend/conf/user.props
   datahub-gms:
     depends_on:
       datahub-upgrade:
         condition: service_completed_successfully
     environment:
     - DATAHUB_SERVER_TYPE=${DATAHUB_SERVER_TYPE:-quickstart}
+    - DATAHUB_SECRET=${CLIENT_SECRET}
     - DATAHUB_TELEMETRY_ENABLED=${DATAHUB_TELEMETRY_ENABLED:-true}
     - DATAHUB_UPGRADE_HISTORY_KAFKA_CONSUMER_GROUP_ID=generic-duhe-consumer-job-client-gms
     - EBEAN_DATASOURCE_DRIVER=com.mysql.jdbc.Driver

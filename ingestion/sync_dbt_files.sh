@@ -3,7 +3,8 @@ set -euo pipefail
 
 # --- Configuration Variables ---
 TODAYS_DATE=$(date +%Y-%m-%d)
-S3_BUCKET="s3://production.dbt-data-artefacts/dbt_datalake_source_main_pipelines_dbt_datalake_source_models/${TODAYS_DATE}/target/"
+YESTERDAYS_DATE=$(date -d "yesterday" +%Y-%m-%d)
+S3_BUCKET="s3://production.dbt-data-artefacts/dbt_datalake_source_main_pipelines_dbt_datalake_source_models/${YESTERDAYS_DATE}/target/"
 # Local directory where artifacts will be synced
 LOCAL_DIR="dbt_artifacts"
 
