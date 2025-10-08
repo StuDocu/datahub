@@ -1,6 +1,6 @@
 TODAYS_DATE=$(date +%Y-%m-%d)
 YESTERDAYS_DATE=$(date -d "yesterday" +%Y-%m-%d)
-S3_BUCKET="s3://production.dbt-data-artefacts/dbt_datalake_source_main_pipelines_dbt_datalak>
+S3_BUCKET=s3://production.dbt-data-artefacts/dbt_datalake_source_main_pipelines_dbt_datalake_source_models/${YESTERDAYS_DATE}/target/"
 # Local directory where artifacts will be synced
 LOCAL_DIR="dbt_artifacts"
 
