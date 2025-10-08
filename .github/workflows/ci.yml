@@ -18,7 +18,7 @@ jobs:
       - name: Deploy to EC2
         run: |
           echo "🚀 Deploying DataHub to EC2..."
-          cd datahub
+          cd /home/ubuntu/datahub
           git pull origin main
           chmod +x deploy/ec2-deploy.sh
           ./deploy/ec2-deploy.sh
