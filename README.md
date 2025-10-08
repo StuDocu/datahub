@@ -1,1 +1,0 @@
-echo "datahub:${CLIENT_SECRET}" > env/user.props
