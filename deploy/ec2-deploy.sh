@@ -27,7 +27,7 @@ echo "✅ Secrets retrieved and environment variables set"
 
 # Pull latest images
 echo "📦 Pulling Docker images..."
-docker-compose pull
+docker compose pull
 
 # Start services
 echo "🚀 Starting DataHub services..."
