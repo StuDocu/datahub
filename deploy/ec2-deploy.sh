@@ -25,21 +25,44 @@ export MYSQL_ROOT_PASSWORD=$(echo $DB_CREDS | jq -r '.MYSQL_ROOT_PASSWORD')
 echo "✅ Secrets retrieved and environment variables set"
 
 
-# Pull latest images
+# Pull latest images (optional - can be slow)
 echo "📦 Pulling Docker images..."
-docker-compose pull
+docker compose pull
 
 # Start services
 echo "🚀 Starting DataHub services..."
-docker-compose up -d
+docker compose up -d
 
-# Wait for services to be healthy
+# Wait for services to be healthy with proper health checks
 echo "⏳ Waiting for services to be healthy..."
-sleep 30
+
+# Wait for MySQL to be ready
+echo "Waiting for MySQL..."
+until docker compose exec mysql mysqladmin ping -h mysql -u datahub --password=${MYSQL_PASSWORD} --silent; do
+  echo "MySQL is not ready yet..."
+  sleep 5
+done
+echo "✅ MySQL is ready"
+
+# Wait for Elasticsearch to be ready
+echo "Waiting for Elasticsearch..."
+until curl -s http://localhost:9200/_cluster/health > /dev/null; do
+  echo "Elasticsearch is not ready yet..."
+  sleep 5
+done
+echo "✅ Elasticsearch is ready"
+
+# Wait for DataHub GMS to be ready
+echo "Waiting for DataHub GMS..."
+until curl -s http://localhost:8080/health > /dev/null; do
+  echo "DataHub GMS is not ready yet..."
+  sleep 5
+done
+echo "✅ DataHub GMS is ready"
 
 # Check service health
 echo "🔍 Checking service health..."
-docker-compose ps
+docker compose ps
 
 # Display access information
 echo "✅ DataHub deployment complete!"
