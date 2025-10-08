@@ -52,8 +52,6 @@ services:
     - METADATA_CHANGE_LOG_VERSIONED_TOPIC_NAME=MetadataChangeLog_Versioned_v1
     - SCHEMA_REGISTRY_URL=http://schema-registry:8081
     - METADATA_SERVICE_AUTH_ENABLED=true
-    env_file:
-      - .env
     hostname: actions
     ports:
       - "4318:4318"
@@ -95,8 +93,6 @@ services:
     - OTEL_SDK_DISABLED=false
     - OTEL_INSTRUMENTATION_COMMON_DEFAULT_ENABLED=true
     - OTEL_PROPAGATORS=tracecontext,baggage
-    env_file:
-      - .env
     hostname: datahub-frontend-react
     image: ${DATAHUB_FRONTEND_IMAGE:-acryldata/datahub-frontend-react}:${DATAHUB_VERSION:-head}
     ports:
@@ -144,8 +140,6 @@ services:
     - SHOW_ACCESS_MANAGEMENT=true
     - THEME_V2_DEFAULT=true
     - UI_INGESTION_ENABLED=true
-    env_file:
-      - .env
     healthcheck:
       interval: 1s
       retries: 3
