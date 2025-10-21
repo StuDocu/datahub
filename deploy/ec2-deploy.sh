@@ -36,7 +36,7 @@ echo "✅ Secrets retrieved and environment variables set"
 
 # Create user.props file with datahub user and client secret as password
 echo "📝 Creating user.props file..."
-cat > env/user.props << EOF
+cat > user.props << EOF
 datahub:${CLIENT_SECRET}
 EOF
 echo "✅ user.props file created with datahub user"
