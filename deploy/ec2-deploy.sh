@@ -29,8 +29,13 @@ echo "✅ Secrets retrieved and environment variables set"
 echo "📦 Pulling Docker images..."
 docker compose pull
 
-# Start services
+# Start services with environment variables
 echo "🚀 Starting DataHub services..."
+MYSQL_PASSWORD=${MYSQL_PASSWORD} \
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD} \
+CLIENT_SECRET=${CLIENT_SECRET} \
+AUTH_OIDC_CLIENT_ID=${AUTH_OIDC_CLIENT_ID} \
+AUTH_OIDC_CLIENT_SECRET=${AUTH_OIDC_CLIENT_SECRET} \
 docker compose up -d
 
 # Wait for services to be healthy with proper health checks
@@ -38,7 +43,7 @@ echo "⏳ Waiting for services to be healthy..."
 
 # Wait for MySQL to be ready
 echo "Waiting for MySQL..."
-until docker compose exec mysql mysqladmin ping -h mysql -u datahub --password=${MYSQL_PASSWORD} --silent; do
+until MYSQL_PASSWORD=${MYSQL_PASSWORD} docker compose exec mysql mysqladmin ping -h mysql -u datahub --password=${MYSQL_PASSWORD} --silent; do
   echo "MySQL is not ready yet..."
   sleep 5
 done
