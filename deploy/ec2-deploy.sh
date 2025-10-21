@@ -24,6 +24,16 @@ export MYSQL_ROOT_PASSWORD=$(echo $DB_CREDS | jq -r '.MYSQL_ROOT_PASSWORD')
 
 echo "✅ Secrets retrieved and environment variables set"
 
+# Create .env file for persistent environment variables
+echo "📝 Creating .env file for persistent environment variables..."
+cat > .env << EOF
+MYSQL_PASSWORD=${MYSQL_PASSWORD}
+MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+CLIENT_SECRET=${CLIENT_SECRET}
+AUTH_OIDC_CLIENT_ID=${AUTH_OIDC_CLIENT_ID}
+AUTH_OIDC_CLIENT_SECRET=${AUTH_OIDC_CLIENT_SECRET}
+EOF
+echo "✅ .env file created"
 
 # Pull latest images (optional - can be slow)
 echo "📦 Pulling Docker images..."
