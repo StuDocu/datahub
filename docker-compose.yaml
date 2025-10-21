@@ -100,7 +100,7 @@ services:
     - "4319:4318"
     volumes:
     - ${HOME}/.datahub/plugins:/etc/datahub/plugins
-    - ./env/user.props:/datahub-frontend/conf/user.props
+    - ./user.props:/datahub-frontend/conf/user.props
   datahub-gms:
     depends_on:
       datahub-upgrade:

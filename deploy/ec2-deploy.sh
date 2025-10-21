@@ -34,6 +34,13 @@ export MYSQL_ROOT_PASSWORD=$(echo $DB_CREDS | jq -r '.MYSQL_ROOT_PASSWORD')
 
 echo "✅ Secrets retrieved and environment variables set"
 
+# Create user.props file with datahub user and client secret as password
+echo "📝 Creating user.props file..."
+cat > user.props << EOF
+datahub:${CLIENT_SECRET}
+EOF
+echo "✅ user.props file created with datahub user"
+
 # ----------------------------------------------------------------
 # 3. PULL IMAGES & START SERVICES
 # ----------------------------------------------------------------
