@@ -195,8 +195,7 @@ services:
     environment:
     - discovery.type=single-node
     - ${XPACK_SECURITY_ENABLED:-xpack.security.enabled=false}
-    - ES_JAVA_OPTS=-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC
-    - OPENSEARCH_JAVA_OPTS=-XX:MaxRAMPercentage=75.0 -XX:+UseG1GC
+    - ES_JAVA_OPTS=-XX:MaxRAMPercentage=75.0
     healthcheck:
       interval: 1s
       retries: 3
