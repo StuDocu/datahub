@@ -13,7 +13,7 @@ services:
     - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
     - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
     - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
-    - KAFKA_HEAP_OPTS=-Xms1g -Xmx5g
+    - KAFKA_HEAP_OPTS=-Xms512m -Xmx2g
     - KAFKA_CONFLUENT_SUPPORT_METRICS_ENABLE=false
     - KAFKA_MESSAGE_MAX_BYTES=5242880
     - KAFKA_MAX_MESSAGE_BYTES=5242880
@@ -148,6 +148,8 @@ services:
     - PE_CONSUMER_ENABLED=true
     - THEME_V2_DEFAULT=true
     - UI_INGESTION_ENABLED=true
+    - JAVA_OPTS=-Xms1g -Xmx2g
+    - JAVA_TOOL_OPTIONS=-XX:MaxRAMPercentage=75.0
     healthcheck:
       interval: 1s
       retries: 3
@@ -203,7 +205,7 @@ services:
     environment:
     - discovery.type=single-node
     - ${XPACK_SECURITY_ENABLED:-xpack.security.enabled=false}
-    - ES_JAVA_OPTS=-XX:MaxRAMPercentage=75.0
+    - ES_JAVA_OPTS=-Xms4g -Xmx4g
     - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m -Dlog4j2.formatMsgNoLookups=true
     healthcheck:
       interval: 1s
