@@ -58,7 +58,7 @@ services:
     image: ${DATAHUB_ACTIONS_IMAGE:-acryldata/datahub-actions}:${DATAHUB_VERSION:-head}
     volumes:
     - ${HOME}/.datahub/plugins:/etc/datahub/plugins
-    - ./ingestion:/app/ingestion
+    - ./ingestion/dbt_artifacts:/dbt_artifacts
   datahub-frontend-react:
     depends_on:
       datahub-gms:
