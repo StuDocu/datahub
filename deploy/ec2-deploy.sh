@@ -48,7 +48,7 @@ echo "🚀 Starting DataHub services..."
 set -a
 source "$ENV_FILE"
 set +a
-docker compose up -d
+docker compose up  --env-file /home/ubuntu/datahub/.env up -d
 
 
 echo "⏳ Waiting for services to be healthy..."
