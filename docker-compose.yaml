@@ -56,6 +56,9 @@ services:
     - DATAHUB_ACTIONS_TEAMS_WEBHOOK_URL=${DATAHUB_ACTIONS_TEAMS_WEBHOOK_URL:-""}
     hostname: actions
     image: ${DATAHUB_ACTIONS_IMAGE:-acryldata/datahub-actions}:${DATAHUB_VERSION:-head}
+    volumes:
+    - ${HOME}/.datahub/plugins:/etc/datahub/plugins
+    - ./ingestion:/app/ingestion
   datahub-frontend-react:
     depends_on:
       datahub-gms:
@@ -100,7 +103,7 @@ services:
     image: ${DATAHUB_FRONTEND_IMAGE:-acryldata/datahub-frontend-react}:${DATAHUB_VERSION:-head}
     ports:
     - ${DATAHUB_MAPPED_FRONTEND_PORT:-9002}:9002
-    - "4319:4318"
+    - "4319:4319"
     volumes:
     - ${HOME}/.datahub/plugins:/etc/datahub/plugins
     - ./user.props:/datahub-frontend/conf/user.props
