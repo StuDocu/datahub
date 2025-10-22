@@ -1,8 +1,9 @@
-name: DBT Daily Sync
+name: Daily dbt Sync
 
 on:
   schedule:
     - cron: '0 8 * * *'
+  workflow_dispatch:
 
 jobs:
   sync_artifacts:
