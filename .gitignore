@@ -52,3 +52,5 @@ yarn-error.log*
 # Temporary files
 *.tmp
 *.temp
+
+user.props
