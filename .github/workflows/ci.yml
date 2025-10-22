@@ -21,8 +21,5 @@ jobs:
           echo "📦 Pulling latest code..."
           git pull origin main
 
-          echo "🧾 Making deploy script executable..."
-          chmod +x deploy/ec2-deploy.sh
-
           echo "🏃 Running deployment script..."
           bash -eux deploy/ec2-deploy.sh
