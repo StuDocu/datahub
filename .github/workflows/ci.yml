@@ -1,27 +1,28 @@
 name: CI/CD
 
-# Controls when the action will run.
 on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
-# Run jobs
 jobs:
   deploy:
     runs-on: datahub-runner
     
     steps:
       - name: Check out the repository code
-        uses: 'actions/checkout@v4'
+        uses: actions/checkout@v4
 
-      - name: Deploy to EC2
+      - name: Deploy DataHub to EC2
         run: |
           echo "🚀 Deploying DataHub to EC2..."
           cd /home/ubuntu/datahub
+
+          echo "📦 Pulling latest code..."
           git pull origin main
+
+          echo "🧾 Making deploy script executable..."
           chmod +x deploy/ec2-deploy.sh
-          ./deploy/ec2-deploy.sh
+
+          echo "🏃 Running deployment script..."
+          bash -eux deploy/ec2-deploy.sh
