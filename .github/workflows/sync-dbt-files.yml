@@ -1,0 +1,40 @@
+name: DBT Daily Sync
+
+on:
+  schedule:
+    - cron: '0 8 * * *'
+
+jobs:
+  sync_artifacts:
+    name: Sync dbt Artifacts from S3
+    runs-on: datahub-runner
+
+    steps:
+      - name: Sync dbt Artifacts
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: |
+          set -eu
+          echo "📂 Syncing dbt artifacts..."
+
+          # Calculate yesterday's date
+          YESTERDAYS_DATE=$(date -d "yesterday" +%Y-%m-%d)
+          echo "Yesterday's date: $YESTERDAYS_DATE"
+
+          S3_BUCKET="s3://production.dbt-data-artefacts/dbt_datalake_source_main_pipelines_dbt_datalake_source_models/${YESTERDAYS_DATE}/target/"
+          
+          LOCAL_DIR="ingestion/dbt_artifacts"
+          # Create Local Directory if It Does Not Exist
+          if [ ! -d "$LOCAL_DIR" ]; then
+            echo "Local directory $LOCAL_DIR does not exist. Creating it..."
+            mkdir -p "$LOCAL_DIR"
+          fi
+
+          # Sync the dbt Artifacts from S3
+          echo "Starting sync from $S3_BUCKET to $LOCAL_DIR ..."
+          aws s3 sync "$S3_BUCKET" "$LOCAL_DIR" --delete # Use --delete to keep local dir clean
+          echo "✅ Sync complete."
+
+        working-directory: /home/ubuntu/datahub
