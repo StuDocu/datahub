@@ -13,7 +13,7 @@ services:
     - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://broker:29092,PLAINTEXT_HOST://localhost:9092
     - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
     - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
-    - KAFKA_HEAP_OPTS=-Xms256m -Xmx256m
+    - KAFKA_HEAP_OPTS=-Xms1g -Xmx5g
     - KAFKA_CONFLUENT_SUPPORT_METRICS_ENABLE=false
     - KAFKA_MESSAGE_MAX_BYTES=5242880
     - KAFKA_MAX_MESSAGE_BYTES=5242880
@@ -51,6 +51,8 @@ services:
     - METADATA_AUDIT_EVENT_NAME=MetadataAuditEvent_v4
     - METADATA_CHANGE_LOG_VERSIONED_TOPIC_NAME=MetadataChangeLog_Versioned_v1
     - SCHEMA_REGISTRY_URL=http://schema-registry:8081
+    - DATAHUB_ACTIONS_SLACK_BOT_TOKEN=${DATAHUB_ACTIONS_SLACK_BOT_TOKEN:-""}
+    - DATAHUB_ACTIONS_TEAMS_WEBHOOK_URL=${DATAHUB_ACTIONS_TEAMS_WEBHOOK_URL:-""}
     hostname: actions
     ports:
       - "4318:4318"
@@ -117,7 +119,7 @@ services:
     - DATAHUB_GMS_SERVER_BOSS_THREAD_COUNT=4
     - DATAHUB_UPGRADE_HISTORY_KAFKA_CONSUMER_GROUP_ID=generic-duhe-consumer-job-client-gms
     - GMS_EXTRA_PACKAGES='acryl-datahub[dbt]'
-    - EBEAN_DATASOURCE_DRIVER=com.mysql.jdbc.Driver
+    - EBEAN_DATASOURCE_DRIVER=com.mysql.cj.jdbc.Driver
     - EBEAN_DATASOURCE_HOST=mysql:3306
     - EBEAN_DATASOURCE_PASSWORD=${MYSQL_PASSWORD}
     - EBEAN_DATASOURCE_URL=jdbc:mysql://mysql:3306/datahub?verifyServerCertificate=false&useSSL=true&useUnicode=yes&characterEncoding=UTF-8&allowPublicKeyRetrieval=true

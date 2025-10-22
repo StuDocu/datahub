@@ -22,4 +22,4 @@ jobs:
           git pull origin main
 
           echo "🏃 Running deployment script..."
-          bash -eu deploy/ec2-deploy.sh
+          bash -eu .github/workflows/ec2-deploy.sh

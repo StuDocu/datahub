@@ -1,30 +1,26 @@
 #!/bin/bash
 set -euo pipefail
-
 echo "🚀 Deploying DataHub on EC2..."
-echo "💣 Destroying previous environment and all its data..."
-docker compose down
-echo "🔐 Retrieving secrets from AWS Secrets Manager..."
 
+
+docker compose down
+
+echo "🔐 Retrieving secrets from AWS Secrets Manager..."
 # Get DataHub client secret
 CLIENT_SECRET=$(aws secretsmanager get-secret-value --secret-id "datahub/client-secret" --query SecretString --output text)
-
 # Get OIDC credentials
 OIDC_CREDS=$(aws secretsmanager get-secret-value --secret-id "datahub/oidc-credentials" --query SecretString --output text)
 AUTH_OIDC_CLIENT_ID=$(echo "$OIDC_CREDS" | jq -r '.AUTH_OIDC_CLIENT_ID')
 AUTH_OIDC_CLIENT_SECRET=$(echo "$OIDC_CREDS" | jq -r '.AUTH_OIDC_CLIENT_SECRET')
-
 # Get database credentials
 DB_CREDS=$(aws secretsmanager get-secret-value --secret-id "datahub/database-credentials" --query SecretString --output text)
 MYSQL_PASSWORD=$(echo "$DB_CREDS" | jq -r '.MYSQL_PASSWORD')
 MYSQL_ROOT_PASSWORD=$(echo "$DB_CREDS" | jq -r '.MYSQL_ROOT_PASSWORD')
-
 echo "✅ Secrets retrieved and environment variables set."
 
 
 ENV_FILE="/home/ubuntu/datahub/.env"
 echo "💾 Writing environment variables to $ENV_FILE..."
-
 cat > "$ENV_FILE" <<EOF
 CLIENT_SECRET=$CLIENT_SECRET
 AUTH_OIDC_CLIENT_ID=$AUTH_OIDC_CLIENT_ID
@@ -34,7 +30,7 @@ MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
 EOF
 
 
-echo "📝 Creating user.props file..."
+echo "📝 Creating user.props file for datahub root user account..."
 cat > user.props <<EOF
 datahub:${CLIENT_SECRET}
 EOF
