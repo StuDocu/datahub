@@ -203,10 +203,14 @@ services:
         limits:
           memory: 15G
     environment:
-    - discovery.type=single-node
-    - ${XPACK_SECURITY_ENABLED:-xpack.security.enabled=false}
-    - ES_JAVA_OPTS=-Xms4g -Xmx4g
-    - OPENSEARCH_JAVA_OPTS=-Xms512m -Xmx512m -Dlog4j2.formatMsgNoLookups=true
+      - discovery.type=single-node
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms4g -Xmx4g"
+      - "action.auto_create_index=true"
+      - "index.number_of_shards=1"
+      - "index.number_of_replicas=0"   # 👈 ensures green cluster on single node
+      - xpack.security.enabled=false
     healthcheck:
       interval: 1s
       retries: 3
