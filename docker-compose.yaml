@@ -206,7 +206,7 @@ services:
       - discovery.type=single-node
       - cluster.name=docker-cluster
       - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+      - "ES_JAVA_OPTS=-Xms4g -Xmx4g"
     healthcheck:
       interval: 1s
       retries: 3
