@@ -201,12 +201,12 @@ services:
     deploy:
       resources:
         limits:
-          memory: 15G
+          memory: 10G
     environment:
       - discovery.type=single-node
       - cluster.name=docker-cluster
       - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=-Xms4g -Xmx4g"
+      - "ES_JAVA_OPTS=-Xms512m -Xmx1g"
       - "action.auto_create_index=true"
       - "index.number_of_shards=1"
       - "index.number_of_replicas=0"   # 👈 ensures green cluster on single node
