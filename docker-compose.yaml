@@ -206,11 +206,7 @@ services:
       - discovery.type=single-node
       - cluster.name=docker-cluster
       - bootstrap.memory_lock=true
-      - "ES_JAVA_OPTS=-Xms512m -Xmx1g"
-      - "action.auto_create_index=true"
-      - "index.number_of_shards=1"
-      - "index.number_of_replicas=0"   # 👈 ensures green cluster on single node
-      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
     healthcheck:
       interval: 1s
       retries: 3
