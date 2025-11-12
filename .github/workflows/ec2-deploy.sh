@@ -38,7 +38,7 @@ echo "✅ user.props file created with datahub user."
 
 
 echo "📦 Pulling Docker images..."
-docker compose pull
+docker compose pull --quiet
 
 echo "🚀 Starting DataHub services..."
 set -a

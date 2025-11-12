@@ -77,6 +77,8 @@ services:
     - JAVA_OPTS=-Xms512m -Xmx512m -Dhttp.port=9002 -Dconfig.file=datahub-frontend/conf/application.conf -Djava.security.auth.login.config=datahub-frontend/conf/jaas.conf -Dlogback.configurationFile=datahub-frontend/conf/logback.xml -Dlogback.debug=false -Dpidfile.path=/dev/null
     - DATAHUB_GMS_AUTH_ENABLED=true
     - DATAHUB_SECRET=${CLIENT_SECRET}
+    - DATAHUB_SYSTEM_CLIENT_ID=__datahub_system
+    - DATAHUB_SYSTEM_CLIENT_SECRET=${CLIENT_SECRET}
     - DATAHUB_APP_VERSION=${DATAHUB_VERSION:-v1.0.0}
     - KAFKA_BOOTSTRAP_SERVER=broker:29092
     - DATAHUB_TRACKING_TOPIC=DataHubUsageEvent_v1
