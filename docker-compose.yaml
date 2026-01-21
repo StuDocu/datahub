@@ -327,7 +327,7 @@ services:
     container_name: cadvisor
     restart: always
     ports:
-      - "8080:8080"
+      - "8085:8080"
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
