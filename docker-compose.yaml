@@ -57,7 +57,7 @@ services:
     hostname: actions
     image: ${DATAHUB_ACTIONS_IMAGE:-acryldata/datahub-actions}:${DATAHUB_VERSION:-head}
     ports:
-      - "4321:4318
+      - "4321:4318"
     volumes:
     - ${HOME}/.datahub/plugins:/etc/datahub/plugins
     - ./ingestion/dbt_artifacts:/dbt_artifacts
