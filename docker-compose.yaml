@@ -302,7 +302,7 @@ services:
     - ELASTICSEARCH_PORT=9200
     - ELASTICSEARCH_PROTOCOL=http
     hostname: elasticsearch-setup
-    image: ${DATAHUB_ELASTIC_SETUP_IMAGE:-acryldata/datahub-elasticsearch-setup}:${DATAHUB_VERSION:-head}
+    image: ${DATAHUB_ELASTIC_SETUP_IMAGE:-acryldata/datahub-elasticsearch-setup}:head
     labels:
       datahub_setup_job: true
   kafka-setup:
@@ -317,7 +317,7 @@ services:
     - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
     - USE_CONFLUENT_SCHEMA_REGISTRY=TRUE
     hostname: kafka-setup
-    image: ${DATAHUB_KAFKA_SETUP_IMAGE:-acryldata/datahub-kafka-setup}:${DATAHUB_VERSION:-head}
+    image: ${DATAHUB_KAFKA_SETUP_IMAGE:-acryldata/datahub-kafka-setup}:head
     labels:
       datahub_setup_job: true
   mysql:
@@ -351,7 +351,7 @@ services:
     - MYSQL_PASSWORD=${MYSQL_PASSWORD}
     - DATAHUB_DB_NAME=datahub
     hostname: mysql-setup
-    image: ${DATAHUB_MYSQL_SETUP_IMAGE:-acryldata/datahub-mysql-setup}:${DATAHUB_VERSION:-head}
+    image: ${DATAHUB_MYSQL_SETUP_IMAGE:-acryldata/datahub-mysql-setup}:head
     labels:
       datahub_setup_job: true
   schema-registry:
