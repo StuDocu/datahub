@@ -8,6 +8,9 @@ dbt_artifacts/
 logs/
 *.log
 
+# Runtime backups created on the EC2 host during deploys/upgrades
+backups/
+
 # Docker
 .docker/
 

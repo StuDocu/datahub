@@ -1,60 +1,94 @@
 #!/bin/bash
 set -euo pipefail
-echo "🚀 Deploying DataHub on EC2..."
 
+echo "Deploying DataHub on EC2..."
 
-docker compose down
+# Pinned DataHub version. All acryldata/* images (gms, frontend, actions, upgrade,
+# and the *-setup jobs) resolve from this. Override by exporting DATAHUB_VERSION.
+DATAHUB_VERSION="${DATAHUB_VERSION:-v1.6.0}"
+AWS_REGION="${AWS_REGION:-eu-west-1}"
 
-echo "🔐 Retrieving secrets from AWS Secrets Manager..."
-# Get DataHub client secret
-CLIENT_SECRET=$(aws secretsmanager get-secret-value --secret-id "datahub/client-secret" --query SecretString --output text)
-# Get OIDC credentials
-OIDC_CREDS=$(aws secretsmanager get-secret-value --secret-id "datahub/oidc-credentials" --query SecretString --output text)
+DATAHUB_DIR="/home/ubuntu/datahub"
+ENV_FILE="$DATAHUB_DIR/.env"
+USER_PROPS_FILE="$DATAHUB_DIR/user.props"
+
+cd "$DATAHUB_DIR"
+
+echo "Retrieving secrets from AWS Secrets Manager..."
+
+# DataHub client/system secret (also used as the datahub root user password)
+CLIENT_SECRET=$(aws secretsmanager get-secret-value --region "$AWS_REGION" \
+  --secret-id "datahub/client-secret" --query SecretString --output text)
+
+# Google OIDC credentials
+OIDC_CREDS=$(aws secretsmanager get-secret-value --region "$AWS_REGION" \
+  --secret-id "datahub/oidc-credentials" --query SecretString --output text)
 AUTH_OIDC_CLIENT_ID=$(echo "$OIDC_CREDS" | jq -r '.AUTH_OIDC_CLIENT_ID')
 AUTH_OIDC_CLIENT_SECRET=$(echo "$OIDC_CREDS" | jq -r '.AUTH_OIDC_CLIENT_SECRET')
-# Get database credentials
-DB_CREDS=$(aws secretsmanager get-secret-value --secret-id "datahub/database-credentials" --query SecretString --output text)
+
+# MySQL credentials
+DB_CREDS=$(aws secretsmanager get-secret-value --region "$AWS_REGION" \
+  --secret-id "datahub/database-credentials" --query SecretString --output text)
 MYSQL_PASSWORD=$(echo "$DB_CREDS" | jq -r '.MYSQL_PASSWORD')
 MYSQL_ROOT_PASSWORD=$(echo "$DB_CREDS" | jq -r '.MYSQL_ROOT_PASSWORD')
-echo "✅ Secrets retrieved and environment variables set."
 
+# Token service signing material. Kept stable across deploys; rotating these
+# invalidates existing DataHub access tokens.
+TOKEN_CREDS=$(aws secretsmanager get-secret-value --region "$AWS_REGION" \
+  --secret-id "datahub/token-service" --query SecretString --output text)
+DATAHUB_TOKEN_SERVICE_SIGNING_KEY=$(echo "$TOKEN_CREDS" | jq -r '.DATAHUB_TOKEN_SERVICE_SIGNING_KEY')
+DATAHUB_TOKEN_SERVICE_SALT=$(echo "$TOKEN_CREDS" | jq -r '.DATAHUB_TOKEN_SERVICE_SALT')
 
-ENV_FILE="/home/ubuntu/datahub/.env"
-echo "💾 Writing environment variables to $ENV_FILE..."
+echo "Secrets retrieved."
+
+# Fail fast if any required value is empty, so we never deploy a half-configured stack.
+for var in CLIENT_SECRET AUTH_OIDC_CLIENT_ID AUTH_OIDC_CLIENT_SECRET \
+  MYSQL_PASSWORD MYSQL_ROOT_PASSWORD \
+  DATAHUB_TOKEN_SERVICE_SIGNING_KEY DATAHUB_TOKEN_SERVICE_SALT DATAHUB_VERSION; do
+  if [ -z "${!var:-}" ] || [ "${!var}" = "null" ]; then
+    echo "ERROR: required value '$var' is empty; aborting deploy." >&2
+    exit 1
+  fi
+done
+
+echo "Writing environment file to $ENV_FILE..."
+# Create with restrictive permissions before writing any secret content.
+install -m 600 /dev/null "$ENV_FILE"
 cat > "$ENV_FILE" <<EOF
 CLIENT_SECRET=$CLIENT_SECRET
 AUTH_OIDC_CLIENT_ID=$AUTH_OIDC_CLIENT_ID
 AUTH_OIDC_CLIENT_SECRET=$AUTH_OIDC_CLIENT_SECRET
 MYSQL_PASSWORD=$MYSQL_PASSWORD
 MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD
+DATAHUB_VERSION=$DATAHUB_VERSION
+DATAHUB_TOKEN_SERVICE_SIGNING_KEY=$DATAHUB_TOKEN_SERVICE_SIGNING_KEY
+DATAHUB_TOKEN_SERVICE_SALT=$DATAHUB_TOKEN_SERVICE_SALT
 EOF
+chmod 600 "$ENV_FILE"
 
-
-echo "📝 Creating user.props file for datahub root user account..."
-cat > user.props <<EOF
+echo "Creating user.props for the datahub root user account..."
+install -m 600 /dev/null "$USER_PROPS_FILE"
+cat > "$USER_PROPS_FILE" <<EOF
 datahub:${CLIENT_SECRET}
 EOF
-echo "✅ user.props file created with datahub user."
+chmod 600 "$USER_PROPS_FILE"
+echo "user.props created."
 
-
-echo "📦 Pulling Docker images..."
-docker compose pull --quiet
-
-echo "🚀 Starting DataHub services..."
+echo "Pulling Docker images..."
 set -a
+# shellcheck disable=SC1090
 source "$ENV_FILE"
 set +a
-docker compose --env-file /home/ubuntu/datahub/.env up -d
+docker compose --env-file "$ENV_FILE" pull --quiet
 
-
-echo "⏳ Waiting for services to be healthy..."
+echo "Starting DataHub services..."
+docker compose --env-file "$ENV_FILE" up -d --remove-orphans
 
 echo "Waiting for MySQL..."
-until docker compose exec mysql mysqladmin ping -h mysql -u datahub --password="${MYSQL_PASSWORD}" --silent; do
+until docker compose exec -T mysql mysqladmin ping -h mysql -u datahub --password="${MYSQL_PASSWORD}" --silent; do
   echo "MySQL is not ready yet..."
   sleep 5
 done
-echo "✅ MySQL is ready."
+echo "MySQL is ready."
 
-
-echo "✅ DataHub deployment complete!"
+echo "DataHub deployment complete."
