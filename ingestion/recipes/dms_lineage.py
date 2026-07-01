@@ -196,6 +196,7 @@ def emit_lineage() -> None:
                 for db, tbl, inf_s, inf_t in glue_tables
                 if inf_s and inf_t
             ]
+            seen_sources: set = set()
             for _glue_db, _glue_tbl, inferred_schema, inferred_table in glue_tables:
                 if inferred_schema and inferred_table:
                     name = (
@@ -203,7 +204,9 @@ def emit_lineage() -> None:
                         if source_db
                         else f"{inferred_schema}.{inferred_table}"
                     )
-                    input_urns.append(make_dataset_urn(platform, name, ENV))
+                    if name not in seen_sources:
+                        seen_sources.add(name)
+                        input_urns.append(make_dataset_urn(platform, name, ENV))
 
         # Downstream: only Glue tables whose source was resolved (matched_glue)
         output_urns = [
