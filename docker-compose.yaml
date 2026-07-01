@@ -65,6 +65,7 @@ services:
     volumes:
     - ${HOME}/.datahub/plugins:/etc/datahub/plugins
     - ./ingestion/dbt_artifacts:/dbt_artifacts
+    - ./ingestion/recipes:/ingestion/recipes
   datahub-frontend-react:
     depends_on:
       datahub-gms:
