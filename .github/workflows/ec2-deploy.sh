@@ -119,10 +119,17 @@ GMS_TOKEN=$(curl -sf -X POST http://localhost:8080/logIn \
 
 upsert_datahub_secret() {
   local name="$1" value="$2"
+  # Use jq to build the payload so that quotes, backslashes, and newlines in
+  # the value are properly JSON-escaped — never interpolate secrets into raw strings.
+  local payload
+  payload=$(jq -n \
+    --arg name "$name" \
+    --arg value "$value" \
+    '{"query":"mutation($name:String!,$value:String!){upsertSecret(input:{name:$name,value:$value}){urn}}","variables":{"name":$name,"value":$value}}')
   curl -sf -X POST http://localhost:8080/api/graphql \
     -H "Authorization: Bearer $GMS_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "{\"query\":\"mutation { upsertSecret(input: {name: \\\"${name}\\\", value: \\\"${value}\\\"}) { urn } }\"}" \
+    -d "$payload" \
     > /dev/null \
   && echo "✅ Secret upserted: $name" \
   || echo "⚠️  Failed to upsert secret: $name"
