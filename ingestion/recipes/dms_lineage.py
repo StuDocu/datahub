@@ -1,0 +1,273 @@
+#!/usr/bin/env python3
+"""
+DMS Lineage Emitter for DataHub.
+
+Dynamically discovers AWS DMS replication tasks and emits lineage:
+  Aurora/RDS source tables -> DMS DataJob -> Glue catalog tables
+
+Fully automatic: new DMS tasks and new tables are picked up on each run
+without any manual changes to this script.
+
+Schedule: runs daily after the Glue ingestion (which catalogs the S3 output)
+so that Glue tables already exist in DataHub when lineage edges are emitted.
+"""
+import json
+import logging
+import os
+
+import boto3
+from datahub.emitter.mce_builder import (
+    make_data_flow_urn,
+    make_data_job_urn,
+    make_dataset_urn,
+)
+from datahub.emitter.mcp import MetadataChangeProposalWrapper
+from datahub.emitter.rest_emitter import DatahubRestEmitter
+from datahub.metadata.schema_classes import (
+    DataFlowInfoClass,
+    DataJobInfoClass,
+    DataJobInputOutputClass,
+)
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+DATAHUB_GMS_URL = os.environ.get("DATAHUB_GMS_URL", "http://localhost:8080")
+DATAHUB_GMS_TOKEN = os.environ.get("DATAHUB_GMS_TOKEN")
+AWS_REGION = "eu-west-1"
+ENV = "PROD"
+
+ENGINE_TO_PLATFORM = {
+    "aurora": "mysql",
+    "mysql": "mysql",
+    "postgres": "postgres",
+    "aurora-postgresql": "postgres",
+}
+
+
+def get_all_dms_tasks(dms_client: object) -> list:
+    tasks = []
+    kwargs: dict = {"WithoutSettings": False}
+    while True:
+        resp = dms_client.describe_replication_tasks(**kwargs)
+        tasks.extend(resp["ReplicationTasks"])
+        marker = resp.get("Marker")
+        if not marker:
+            break
+        kwargs["Marker"] = marker
+    return tasks
+
+
+def get_endpoint(dms_client: object, arn: str) -> dict:
+    resp = dms_client.describe_endpoints(
+        Filters=[{"Name": "endpoint-arn", "Values": [arn]}]
+    )
+    return resp["Endpoints"][0] if resp["Endpoints"] else {}
+
+
+def find_glue_tables_for_s3_prefix(
+    glue_client: object, bucket: str, folder: str
+) -> list:
+    """Return (database, table, inferred_schema, inferred_table) tuples.
+
+    DMS writes to s3://bucket/folder/{schema}/{table}/ so the path components
+    after the prefix let us infer the Aurora source schema and table name even
+    for wildcard replication rules.
+    """
+    s3_prefix = f"s3://{bucket}/{folder}".rstrip("/") + "/"
+    matches = []
+    db_paginator = glue_client.get_paginator("get_databases")
+    for db_page in db_paginator.paginate():
+        for db in db_page["DatabaseList"]:
+            db_name = db["Name"]
+            table_paginator = glue_client.get_paginator("get_tables")
+            for table_page in table_paginator.paginate(DatabaseName=db_name):
+                for table in table_page["TableList"]:
+                    location = (
+                        table.get("StorageDescriptor", {}).get("Location", "")
+                    )
+                    if location.startswith(s3_prefix):
+                        # Extract schema/table from relative path: {schema}/{table}/...
+                        relative = location[len(s3_prefix):].rstrip("/")
+                        parts = relative.split("/")
+                        inferred_schema = parts[0] if len(parts) >= 2 else ""
+                        inferred_table = parts[1] if len(parts) >= 2 else parts[0] if parts else ""
+                        matches.append(
+                            (db_name, table["Name"], inferred_schema, inferred_table)
+                        )
+    return matches
+
+
+def parse_explicit_source_tables(table_mappings_json: str) -> list:
+    """
+    Extract (schema, table) pairs from DMS selection rules.
+    Returns an empty list when all rules use wildcards — callers should
+    fall back to Glue-inferred source tables in that case.
+    """
+    results = []
+    try:
+        rules = json.loads(table_mappings_json).get("rules", [])
+        for rule in rules:
+            if (
+                rule.get("rule-type") == "selection"
+                and rule.get("rule-action") == "include"
+            ):
+                locator = rule.get("object-locator", {})
+                schema = locator.get("schema-name", "%")
+                table = locator.get("table-name", "%")
+                if "%" not in schema and "%" not in table:
+                    results.append((schema, table))
+    except Exception as exc:
+        logger.warning("Could not parse table mappings: %s", exc)
+    return results
+
+
+def emit_lineage() -> None:
+    dms = boto3.client("dms", region_name=AWS_REGION)
+    glue = boto3.client("glue", region_name=AWS_REGION)
+    emitter = DatahubRestEmitter(DATAHUB_GMS_URL, token=DATAHUB_GMS_TOKEN)
+
+    tasks = get_all_dms_tasks(dms)
+    logger.info("Discovered %d DMS tasks", len(tasks))
+
+    for task in tasks:
+        task_id = task["ReplicationTaskIdentifier"]
+        instance_id = task["ReplicationInstanceArn"].split(":")[-1]
+
+        source_ep = get_endpoint(dms, task["SourceEndpointArn"])
+        target_ep = get_endpoint(dms, task["TargetEndpointArn"])
+
+        if target_ep.get("EngineName", "").lower() != "s3":
+            logger.info(
+                "Skipping %s — target is not S3 (%s)",
+                task_id,
+                target_ep.get("EngineName"),
+            )
+            continue
+
+        s3 = target_ep.get("S3Settings", {})
+        bucket = s3.get("BucketName", "")
+        folder = s3.get("BucketFolder", "")
+        if not bucket:
+            logger.warning("Skipping %s — no S3 bucket in target endpoint", task_id)
+            continue
+
+        if not folder:
+            logger.warning(
+                "Skipping %s — BucketFolder is empty; matching against the whole "
+                "bucket would link unrelated Glue tables",
+                task_id,
+            )
+            continue
+
+        glue_tables = find_glue_tables_for_s3_prefix(glue, bucket, folder)
+        if not glue_tables:
+            logger.warning(
+                "No Glue tables found for %s at s3://%s/%s", task_id, bucket, folder
+            )
+            continue
+
+        platform = ENGINE_TO_PLATFORM.get(
+            source_ep.get("EngineName", "").lower(), "mysql"
+        )
+        source_db = source_ep.get("DatabaseName", "")
+        explicit_tables = parse_explicit_source_tables(task.get("TableMappings", "{}"))
+
+        # Build upstream Aurora URNs.
+        # Explicit rules: use the declared schema/table names.
+        # Wildcard rules: infer schema/table from the DMS S3 output path structure
+        #   (DMS writes to s3://bucket/folder/{schema}/{table}/).
+        input_urns = []
+        if explicit_tables:
+            explicit_set = {(s.lower(), t.lower()) for s, t in explicit_tables}
+            # Only include Glue tables whose inferred path matches a declared rule,
+            # so wildcard-replicated tables do not get mismatched lineage.
+            matched_glue = [
+                (db, tbl)
+                for db, tbl, inf_s, inf_t in glue_tables
+                if (inf_s.lower(), inf_t.lower()) in explicit_set
+            ]
+            for schema, table in explicit_tables:
+                name = f"{source_db}.{schema}.{table}" if source_db else f"{schema}.{table}"
+                input_urns.append(make_dataset_urn(platform, name, ENV))
+        else:
+            matched_glue = [
+                (db, tbl)
+                for db, tbl, inf_s, inf_t in glue_tables
+                if inf_s and inf_t
+            ]
+            seen_sources: set = set()
+            for _glue_db, _glue_tbl, inferred_schema, inferred_table in glue_tables:
+                if inferred_schema and inferred_table:
+                    name = (
+                        f"{source_db}.{inferred_schema}.{inferred_table}"
+                        if source_db
+                        else f"{inferred_schema}.{inferred_table}"
+                    )
+                    if name not in seen_sources:
+                        seen_sources.add(name)
+                        input_urns.append(make_dataset_urn(platform, name, ENV))
+
+        # Downstream: only Glue tables whose source was resolved (matched_glue)
+        output_urns = [
+            make_dataset_urn("glue", f"{db}.{tbl}", ENV)
+            for db, tbl in matched_glue
+        ]
+
+        if not input_urns:
+            logger.warning(
+                "Skipping lineage emit for %s — could not resolve any upstream "
+                "Aurora URNs (S3 paths did not yield schema/table segments)",
+                task_id,
+            )
+            continue
+
+        flow_urn = make_data_flow_urn("dms", instance_id, ENV)
+        job_urn = make_data_job_urn("dms", instance_id, task_id, ENV)
+
+        emitter.emit_mcp(
+            MetadataChangeProposalWrapper(
+                entityUrn=flow_urn,
+                aspect=DataFlowInfoClass(
+                    name=instance_id,
+                    customProperties={"platform": "AWS DMS"},
+                ),
+            )
+        )
+        emitter.emit_mcp(
+            MetadataChangeProposalWrapper(
+                entityUrn=job_urn,
+                aspect=DataJobInfoClass(
+                    name=task_id,
+                    type="BATCH",
+                    customProperties={
+                        "migrationType": task.get("MigrationType", ""),
+                        "status": task.get("Status", ""),
+                        "replicationInstance": instance_id,
+                    },
+                ),
+            )
+        )
+
+        emitter.emit_mcp(
+            MetadataChangeProposalWrapper(
+                entityUrn=job_urn,
+                aspect=DataJobInputOutputClass(
+                    inputDatasets=input_urns,
+                    outputDatasets=output_urns,
+                ),
+            )
+        )
+
+        logger.info(
+            "%s: %d upstream Aurora tables -> %d downstream Glue tables",
+            task_id,
+            len(input_urns),
+            len(output_urns),
+        )
+
+    logger.info("DMS lineage emission complete")
+
+
+if __name__ == "__main__":
+    emit_lineage()
