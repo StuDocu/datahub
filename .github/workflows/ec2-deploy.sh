@@ -91,4 +91,29 @@ until docker compose exec -T mysql mysqladmin ping -h mysql -u datahub --passwor
 done
 echo "MySQL is ready."
 
+
+echo "Waiting for DataHub GMS to be healthy..."
+until curl -sf http://localhost:8080/health > /dev/null 2>&1; do
+  echo "GMS not ready yet, retrying..."
+  sleep 5
+done
+echo "DataHub GMS is healthy."
+
+echo "Deploying ingestion recipes to DataHub UI..."
+deploy_recipe() {
+  local name="$1" schedule="$2" tz="$3" recipe="$4"
+  docker exec datahub-datahub-actions-1 \
+    datahub ingest deploy \
+      --name "$name" \
+      --schedule "$schedule" \
+      --time-zone "$tz" \
+      -c "$recipe" \
+  && echo "✅ Deployed: $name" \
+  || echo "⚠️  Failed to deploy: $name (will retry on next deploy)"
+}
+
+deploy_recipe "DBT"                 "0 0 * * *"  "Europe/Amsterdam" /ingestion/recipes/dbt.yml
+deploy_recipe "Glue"                "0 3 * * *"  "Europe/Amsterdam" /ingestion/recipes/glue.yml
+deploy_recipe "Metabase"            "0 8 * * *"  "Europe/Amsterdam" /ingestion/recipes/metabase.yml
+deploy_recipe "Redshift Production" "0 21 * * *" "Europe/Amsterdam" /ingestion/recipes/redshift_production.yml
 echo "DataHub deployment complete."
