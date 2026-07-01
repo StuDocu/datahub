@@ -113,9 +113,10 @@ echo "Syncing ingestion credentials into DataHub secrets store..."
 # DataHub recipes use ${SECRET_NAME} substitution resolved from the GMS secrets store
 # (backed by MySQL). Re-upserting on every deploy ensures secrets survive volume resets
 # and stay in sync with AWS Secrets Manager as the source of truth.
+LOGIN_PAYLOAD=$(jq -n --arg password "$CLIENT_SECRET" '{"username":"datahub","password":$password}')
 GMS_TOKEN=$(curl -sf -X POST http://localhost:8080/logIn \
   -H "Content-Type: application/json" \
-  -d "{\"username\":\"datahub\",\"password\":\"${CLIENT_SECRET}\"}" | jq -r '.accessToken')
+  -d "$LOGIN_PAYLOAD" | jq -r '.accessToken')
 
 SECRET_UPSERT_FAILED=0
 
