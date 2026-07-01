@@ -179,10 +179,23 @@ def emit_lineage() -> None:
         #   (DMS writes to s3://bucket/folder/{schema}/{table}/).
         input_urns = []
         if explicit_tables:
+            explicit_set = {(s.lower(), t.lower()) for s, t in explicit_tables}
+            # Only include Glue tables whose inferred path matches a declared rule,
+            # so wildcard-replicated tables do not get mismatched lineage.
+            matched_glue = [
+                (db, tbl)
+                for db, tbl, inf_s, inf_t in glue_tables
+                if (inf_s.lower(), inf_t.lower()) in explicit_set
+            ]
             for schema, table in explicit_tables:
                 name = f"{source_db}.{schema}.{table}" if source_db else f"{schema}.{table}"
                 input_urns.append(make_dataset_urn(platform, name, ENV))
         else:
+            matched_glue = [
+                (db, tbl)
+                for db, tbl, inf_s, inf_t in glue_tables
+                if inf_s and inf_t
+            ]
             for _glue_db, _glue_tbl, inferred_schema, inferred_table in glue_tables:
                 if inferred_schema and inferred_table:
                     name = (
@@ -192,10 +205,10 @@ def emit_lineage() -> None:
                     )
                     input_urns.append(make_dataset_urn(platform, name, ENV))
 
-        # Downstream: Glue catalog tables (already ingested by the Glue recipe)
+        # Downstream: only Glue tables whose source was resolved (matched_glue)
         output_urns = [
             make_dataset_urn("glue", f"{db}.{tbl}", ENV)
-            for db, tbl, _s, _t in glue_tables
+            for db, tbl in matched_glue
         ]
 
         if not input_urns:
