@@ -152,6 +152,14 @@ def emit_lineage() -> None:
             logger.warning("Skipping %s — no S3 bucket in target endpoint", task_id)
             continue
 
+        if not folder:
+            logger.warning(
+                "Skipping %s — BucketFolder is empty; matching against the whole "
+                "bucket would link unrelated Glue tables",
+                task_id,
+            )
+            continue
+
         glue_tables = find_glue_tables_for_s3_prefix(glue, bucket, folder)
         if not glue_tables:
             logger.warning(
@@ -216,6 +224,14 @@ def emit_lineage() -> None:
                 ),
             )
         )
+        if not input_urns:
+            logger.warning(
+                "Skipping lineage emit for %s — could not resolve any upstream "
+                "Aurora URNs (S3 paths did not yield schema/table segments)",
+                task_id,
+            )
+            continue
+
         emitter.emit_mcp(
             MetadataChangeProposalWrapper(
                 entityUrn=job_urn,
