@@ -39,14 +39,17 @@ TOKEN_CREDS=$(aws secretsmanager get-secret-value --region "$AWS_REGION" \
 DATAHUB_TOKEN_SERVICE_SIGNING_KEY=$(echo "$TOKEN_CREDS" | jq -r '.DATAHUB_TOKEN_SERVICE_SIGNING_KEY')
 DATAHUB_TOKEN_SERVICE_SALT=$(echo "$TOKEN_CREDS" | jq -r '.DATAHUB_TOKEN_SERVICE_SALT')
 
-# Ingestion credentials (Metabase + Redshift) — used by recipes as DataHub Secrets.
-# Secret format: {"METABASE_USERNAME":"...","METABASE_PASSWORD":"...","REDSHIFT_USERNAME":"...","REDSHIFT_PASSWORD":"..."}
-INGESTION_CREDS=$(aws secretsmanager get-secret-value --region "$AWS_REGION" \
-  --secret-id "datahub/ingestion-credentials" --query SecretString --output text)
-METABASE_USERNAME=$(echo "$INGESTION_CREDS" | jq -r '.METABASE_USERNAME')
-METABASE_PASSWORD=$(echo "$INGESTION_CREDS" | jq -r '.METABASE_PASSWORD')
-REDSHIFT_USERNAME=$(echo "$INGESTION_CREDS" | jq -r '.REDSHIFT_USERNAME')
-REDSHIFT_PASSWORD=$(echo "$INGESTION_CREDS" | jq -r '.REDSHIFT_PASSWORD')
+# Metabase credentials — secret key is the login email, value is the password
+METABASE_CREDS=$(aws secretsmanager get-secret-value --region "$AWS_REGION" \
+  --secret-id "metabase/user_data" --query SecretString --output text)
+METABASE_USERNAME=$(echo "$METABASE_CREDS" | jq -r 'keys[0]')
+METABASE_PASSWORD=$(echo "$METABASE_CREDS" | jq -r '.[keys[0]]')
+
+# Redshift credentials for the datahub_user
+REDSHIFT_CREDS=$(aws secretsmanager get-secret-value --region "$AWS_REGION" \
+  --secret-id "Redshift/production-cluster/datahub_user" --query SecretString --output text)
+REDSHIFT_USERNAME=$(echo "$REDSHIFT_CREDS" | jq -r '.username')
+REDSHIFT_PASSWORD=$(echo "$REDSHIFT_CREDS" | jq -r '.password')
 
 echo "Secrets retrieved."
 
