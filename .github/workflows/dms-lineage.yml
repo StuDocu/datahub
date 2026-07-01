@@ -1,0 +1,27 @@
+name: DMS Lineage Sync
+
+on:
+  schedule:
+    # 02:00 UTC = 04:00 Amsterdam
+    # Runs after Glue ingestion (03:00 Amsterdam) so Glue tables exist in DataHub
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  emit_lineage:
+    name: Emit DMS Lineage to DataHub
+    runs-on: datahub-runner
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: pip install "acryl-datahub[dbt]" boto3
+
+      - name: Emit DMS lineage to DataHub
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: eu-west-1
+        run: python3 ingestion/recipes/dms_lineage.py
