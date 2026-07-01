@@ -39,12 +39,22 @@ TOKEN_CREDS=$(aws secretsmanager get-secret-value --region "$AWS_REGION" \
 DATAHUB_TOKEN_SERVICE_SIGNING_KEY=$(echo "$TOKEN_CREDS" | jq -r '.DATAHUB_TOKEN_SERVICE_SIGNING_KEY')
 DATAHUB_TOKEN_SERVICE_SALT=$(echo "$TOKEN_CREDS" | jq -r '.DATAHUB_TOKEN_SERVICE_SALT')
 
+# Ingestion credentials (Metabase + Redshift) — used by recipes as DataHub Secrets.
+# Secret format: {"METABASE_USERNAME":"...","METABASE_PASSWORD":"...","REDSHIFT_USERNAME":"...","REDSHIFT_PASSWORD":"..."}
+INGESTION_CREDS=$(aws secretsmanager get-secret-value --region "$AWS_REGION" \
+  --secret-id "datahub/ingestion-credentials" --query SecretString --output text)
+METABASE_USERNAME=$(echo "$INGESTION_CREDS" | jq -r '.METABASE_USERNAME')
+METABASE_PASSWORD=$(echo "$INGESTION_CREDS" | jq -r '.METABASE_PASSWORD')
+REDSHIFT_USERNAME=$(echo "$INGESTION_CREDS" | jq -r '.REDSHIFT_USERNAME')
+REDSHIFT_PASSWORD=$(echo "$INGESTION_CREDS" | jq -r '.REDSHIFT_PASSWORD')
+
 echo "Secrets retrieved."
 
 # Fail fast if any required value is empty, so we never deploy a half-configured stack.
 for var in CLIENT_SECRET AUTH_OIDC_CLIENT_ID AUTH_OIDC_CLIENT_SECRET \
   MYSQL_PASSWORD MYSQL_ROOT_PASSWORD \
-  DATAHUB_TOKEN_SERVICE_SIGNING_KEY DATAHUB_TOKEN_SERVICE_SALT DATAHUB_VERSION; do
+  DATAHUB_TOKEN_SERVICE_SIGNING_KEY DATAHUB_TOKEN_SERVICE_SALT DATAHUB_VERSION \
+  METABASE_USERNAME METABASE_PASSWORD REDSHIFT_USERNAME REDSHIFT_PASSWORD; do
   if [ -z "${!var:-}" ] || [ "${!var}" = "null" ]; then
     echo "ERROR: required value '$var' is empty; aborting deploy." >&2
     exit 1
@@ -98,6 +108,30 @@ until curl -sf http://localhost:8080/health > /dev/null 2>&1; do
   sleep 5
 done
 echo "DataHub GMS is healthy."
+
+echo "Syncing ingestion credentials into DataHub secrets store..."
+# DataHub recipes use ${SECRET_NAME} substitution resolved from the GMS secrets store
+# (backed by MySQL). Re-upserting on every deploy ensures secrets survive volume resets
+# and stay in sync with AWS Secrets Manager as the source of truth.
+GMS_TOKEN=$(curl -sf -X POST http://localhost:8080/logIn \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"datahub\",\"password\":\"${CLIENT_SECRET}\"}" | jq -r '.accessToken')
+
+upsert_datahub_secret() {
+  local name="$1" value="$2"
+  curl -sf -X POST http://localhost:8080/api/graphql \
+    -H "Authorization: Bearer $GMS_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d "{\"query\":\"mutation { upsertSecret(input: {name: \\\"${name}\\\", value: \\\"${value}\\\"}) { urn } }\"}" \
+    > /dev/null \
+  && echo "✅ Secret upserted: $name" \
+  || echo "⚠️  Failed to upsert secret: $name"
+}
+
+upsert_datahub_secret "METABASE_USERNAME" "$METABASE_USERNAME"
+upsert_datahub_secret "METABASE_PASSWORD" "$METABASE_PASSWORD"
+upsert_datahub_secret "REDSHIFT_USERNAME" "$REDSHIFT_USERNAME"
+upsert_datahub_secret "REDSHIFT_PASSWORD" "$REDSHIFT_PASSWORD"
 
 echo "Deploying ingestion recipes to DataHub UI..."
 deploy_recipe() {
