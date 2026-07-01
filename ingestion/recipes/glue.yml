@@ -1,0 +1,8 @@
+source:
+  type: glue
+  config:
+    aws_region: eu-west-1
+sink:
+  type: datahub-rest
+  config:
+    server: "http://datahub-gms:8080"
