@@ -198,6 +198,14 @@ def emit_lineage() -> None:
             for db, tbl, _s, _t in glue_tables
         ]
 
+        if not input_urns:
+            logger.warning(
+                "Skipping lineage emit for %s — could not resolve any upstream "
+                "Aurora URNs (S3 paths did not yield schema/table segments)",
+                task_id,
+            )
+            continue
+
         flow_urn = make_data_flow_urn("dms", instance_id, ENV)
         job_urn = make_data_job_urn("dms", instance_id, task_id, ENV)
 
@@ -224,13 +232,6 @@ def emit_lineage() -> None:
                 ),
             )
         )
-        if not input_urns:
-            logger.warning(
-                "Skipping lineage emit for %s — could not resolve any upstream "
-                "Aurora URNs (S3 paths did not yield schema/table segments)",
-                task_id,
-            )
-            continue
 
         emitter.emit_mcp(
             MetadataChangeProposalWrapper(
