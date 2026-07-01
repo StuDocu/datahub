@@ -1,0 +1,25 @@
+source:
+  type: metabase
+  config:
+    connect_uri: "https://metabase.studocu.com/"
+    username: "${METABASE_USERNAME}"
+    password: "${METABASE_PASSWORD}"
+    database_alias_map:
+      "Data Warehouse - Sensitive (Ops - Management)": production_sensitive
+      "Data Warehouse": production
+      "Data Warehouse - Sensitive (ALL)": production_sensitive
+      "Data Lake": raw_data
+      "Raw data": raw_data
+      "Data Warehouse - Sensitive (Ops)": production_sensitive
+      "Dev": dev
+    engine_platform_map:
+      redshift: redshift
+      glue: glue
+      athena: athena
+    stateful_ingestion:
+      enabled: true
+      remove_stale_metadata: true
+sink:
+  type: datahub-rest
+  config:
+    server: "http://datahub-gms:8080"
