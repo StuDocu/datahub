@@ -13,6 +13,7 @@ so that Glue tables already exist in DataHub when lineage edges are emitted.
 """
 import json
 import logging
+import os
 
 import boto3
 from datahub.emitter.mce_builder import (
@@ -31,7 +32,8 @@ from datahub.metadata.schema_classes import (
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
-DATAHUB_GMS_URL = "http://localhost:8080"
+DATAHUB_GMS_URL = os.environ.get("DATAHUB_GMS_URL", "http://localhost:8080")
+DATAHUB_GMS_TOKEN = os.environ.get("DATAHUB_GMS_TOKEN")
 AWS_REGION = "eu-west-1"
 ENV = "PROD"
 
@@ -66,8 +68,12 @@ def get_endpoint(dms_client: object, arn: str) -> dict:
 def find_glue_tables_for_s3_prefix(
     glue_client: object, bucket: str, folder: str
 ) -> list:
-    """Return (database, table) pairs whose S3 location starts with s3://bucket/folder/."""
-    # Trailing slash prevents folder2 from matching when looking for folder
+    """Return (database, table, inferred_schema, inferred_table) tuples.
+
+    DMS writes to s3://bucket/folder/{schema}/{table}/ so the path components
+    after the prefix let us infer the Aurora source schema and table name even
+    for wildcard replication rules.
+    """
     s3_prefix = f"s3://{bucket}/{folder}".rstrip("/") + "/"
     matches = []
     db_paginator = glue_client.get_paginator("get_databases")
@@ -81,14 +87,22 @@ def find_glue_tables_for_s3_prefix(
                         table.get("StorageDescriptor", {}).get("Location", "")
                     )
                     if location.startswith(s3_prefix):
-                        matches.append((db_name, table["Name"]))
+                        # Extract schema/table from relative path: {schema}/{table}/...
+                        relative = location[len(s3_prefix):].rstrip("/")
+                        parts = relative.split("/")
+                        inferred_schema = parts[0] if len(parts) >= 2 else ""
+                        inferred_table = parts[1] if len(parts) >= 2 else parts[0] if parts else ""
+                        matches.append(
+                            (db_name, table["Name"], inferred_schema, inferred_table)
+                        )
     return matches
 
 
 def parse_explicit_source_tables(table_mappings_json: str) -> list:
     """
     Extract (schema, table) pairs from DMS selection rules.
-    Skips wildcard rules (%) — those are resolved via Glue table discovery.
+    Returns an empty list when all rules use wildcards — callers should
+    fall back to Glue-inferred source tables in that case.
     """
     results = []
     try:
@@ -111,7 +125,7 @@ def parse_explicit_source_tables(table_mappings_json: str) -> list:
 def emit_lineage() -> None:
     dms = boto3.client("dms", region_name=AWS_REGION)
     glue = boto3.client("glue", region_name=AWS_REGION)
-    emitter = DatahubRestEmitter(DATAHUB_GMS_URL)
+    emitter = DatahubRestEmitter(DATAHUB_GMS_URL, token=DATAHUB_GMS_TOKEN)
 
     tasks = get_all_dms_tasks(dms)
     logger.info("Discovered %d DMS tasks", len(tasks))
@@ -151,16 +165,29 @@ def emit_lineage() -> None:
         source_db = source_ep.get("DatabaseName", "")
         explicit_tables = parse_explicit_source_tables(task.get("TableMappings", "{}"))
 
-        # Upstream: Aurora/RDS source tables (explicit names only; wildcards resolved via Glue)
+        # Build upstream Aurora URNs.
+        # Explicit rules: use the declared schema/table names.
+        # Wildcard rules: infer schema/table from the DMS S3 output path structure
+        #   (DMS writes to s3://bucket/folder/{schema}/{table}/).
         input_urns = []
-        for schema, table in explicit_tables:
-            name = f"{source_db}.{schema}.{table}" if source_db else f"{schema}.{table}"
-            input_urns.append(make_dataset_urn(platform, name, ENV))
+        if explicit_tables:
+            for schema, table in explicit_tables:
+                name = f"{source_db}.{schema}.{table}" if source_db else f"{schema}.{table}"
+                input_urns.append(make_dataset_urn(platform, name, ENV))
+        else:
+            for _glue_db, _glue_tbl, inferred_schema, inferred_table in glue_tables:
+                if inferred_schema and inferred_table:
+                    name = (
+                        f"{source_db}.{inferred_schema}.{inferred_table}"
+                        if source_db
+                        else f"{inferred_schema}.{inferred_table}"
+                    )
+                    input_urns.append(make_dataset_urn(platform, name, ENV))
 
         # Downstream: Glue catalog tables (already ingested by the Glue recipe)
         output_urns = [
             make_dataset_urn("glue", f"{db}.{tbl}", ENV)
-            for db, tbl in glue_tables
+            for db, tbl, _s, _t in glue_tables
         ]
 
         flow_urn = make_data_flow_urn("dms", instance_id, ENV)
