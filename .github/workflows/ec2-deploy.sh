@@ -156,21 +156,39 @@ if [ "$SECRET_UPSERT_FAILED" -ne 0 ]; then
   exit 1
 fi
 
+echo "Waiting for datahub-actions container to be ready..."
+until docker exec datahub-datahub-actions-1 datahub version > /dev/null 2>&1; do
+  echo "datahub-actions not ready yet, retrying..."
+  sleep 5
+done
+echo "datahub-actions is ready."
+
 echo "Deploying ingestion recipes to DataHub UI..."
+RECIPE_DEPLOY_FAILED=0
+
 deploy_recipe() {
   local name="$1" schedule="$2" tz="$3" recipe="$4"
-  docker exec datahub-datahub-actions-1 \
+  if docker exec datahub-datahub-actions-1 \
     datahub ingest deploy \
       --name "$name" \
       --schedule "$schedule" \
       --time-zone "$tz" \
-      -c "$recipe" \
-  && echo "✅ Deployed: $name" \
-  || echo "⚠️  Failed to deploy: $name (will retry on next deploy)"
+      -c "$recipe"; then
+    echo "✅ Deployed: $name"
+  else
+    echo "ERROR: Failed to deploy recipe '$name'" >&2
+    RECIPE_DEPLOY_FAILED=1
+  fi
 }
 
 deploy_recipe "DBT"                 "0 0 * * *"  "Europe/Amsterdam" /ingestion/recipes/dbt.yml
 deploy_recipe "Glue"                "0 3 * * *"  "Europe/Amsterdam" /ingestion/recipes/glue.yml
 deploy_recipe "Metabase"            "0 8 * * *"  "Europe/Amsterdam" /ingestion/recipes/metabase.yml
 deploy_recipe "Redshift Production" "0 21 * * *" "Europe/Amsterdam" /ingestion/recipes/redshift_production.yml
+
+if [ "$RECIPE_DEPLOY_FAILED" -ne 0 ]; then
+  echo "ERROR: one or more ingestion recipes failed to deploy." >&2
+  exit 1
+fi
+
 echo "DataHub deployment complete."
