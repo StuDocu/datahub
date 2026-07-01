@@ -2,9 +2,9 @@ name: DMS Lineage Sync
 
 on:
   schedule:
-    # 02:00 UTC = 04:00 Amsterdam
-    # Runs after Glue ingestion (03:00 Amsterdam) so Glue tables exist in DataHub
-    - cron: '0 2 * * *'
+    # 03:00 UTC = 04:00 Amsterdam (CET) / 05:00 Amsterdam (CEST)
+    # Always runs ≥1 h after Glue ingestion (03:00 Amsterdam) in both winter and summer
+    - cron: '0 3 * * *'
   workflow_dispatch:
 
 jobs:
