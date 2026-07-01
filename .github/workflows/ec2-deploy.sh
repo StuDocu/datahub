@@ -117,6 +117,8 @@ GMS_TOKEN=$(curl -sf -X POST http://localhost:8080/logIn \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"datahub\",\"password\":\"${CLIENT_SECRET}\"}" | jq -r '.accessToken')
 
+SECRET_UPSERT_FAILED=0
+
 upsert_datahub_secret() {
   local name="$1" value="$2"
   # Use jq to build the payload so that quotes, backslashes, and newlines in
@@ -126,19 +128,28 @@ upsert_datahub_secret() {
     --arg name "$name" \
     --arg value "$value" \
     '{"query":"mutation($name:String!,$value:String!){upsertSecret(input:{name:$name,value:$value}){urn}}","variables":{"name":$name,"value":$value}}')
-  curl -sf -X POST http://localhost:8080/api/graphql \
+  if curl -sf -X POST http://localhost:8080/api/graphql \
     -H "Authorization: Bearer $GMS_TOKEN" \
     -H "Content-Type: application/json" \
     -d "$payload" \
-    > /dev/null \
-  && echo "✅ Secret upserted: $name" \
-  || echo "⚠️  Failed to upsert secret: $name"
+    > /dev/null; then
+    echo "✅ Secret upserted: $name"
+  else
+    echo "ERROR: Failed to upsert DataHub secret '$name'" >&2
+    SECRET_UPSERT_FAILED=1
+  fi
 }
 
 upsert_datahub_secret "METABASE_USERNAME" "$METABASE_USERNAME"
 upsert_datahub_secret "METABASE_PASSWORD" "$METABASE_PASSWORD"
 upsert_datahub_secret "REDSHIFT_USERNAME" "$REDSHIFT_USERNAME"
 upsert_datahub_secret "REDSHIFT_PASSWORD" "$REDSHIFT_PASSWORD"
+
+if [ "$SECRET_UPSERT_FAILED" -ne 0 ]; then
+  echo "ERROR: one or more DataHub secrets failed to upsert; aborting deploy." >&2
+  echo "Recipes that reference \${METABASE_*} or \${REDSHIFT_*} would run with unresolved credentials." >&2
+  exit 1
+fi
 
 echo "Deploying ingestion recipes to DataHub UI..."
 deploy_recipe() {
