@@ -3,7 +3,7 @@ name: DMS Lineage Sync
 on:
   schedule:
     # 03:00 UTC = 04:00 Amsterdam (CET) / 05:00 Amsterdam (CEST)
-    # Always runs ≥1 h after Glue ingestion (03:00 Amsterdam) in both winter and summer
+    # Always runs >=1 h after Glue ingestion (03:00 Amsterdam) in both winter and summer
     - cron: '0 3 * * *'
   workflow_dispatch:
 
@@ -24,4 +24,5 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: eu-west-1
+          DATAHUB_GMS_TOKEN: ${{ secrets.DATAHUB_GMS_TOKEN }}
         run: python3 ingestion/recipes/dms_lineage.py
