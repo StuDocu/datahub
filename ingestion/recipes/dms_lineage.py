@@ -66,20 +66,22 @@ def get_endpoint(dms_client: object, arn: str) -> dict:
 def find_glue_tables_for_s3_prefix(
     glue_client: object, bucket: str, folder: str
 ) -> list:
-    """Return (database, table) pairs whose S3 location starts with s3://bucket/folder."""
-    s3_prefix = f"s3://{bucket}/{folder}".rstrip("/")
+    """Return (database, table) pairs whose S3 location starts with s3://bucket/folder/."""
+    # Trailing slash prevents folder2 from matching when looking for folder
+    s3_prefix = f"s3://{bucket}/{folder}".rstrip("/") + "/"
     matches = []
-    resp = glue_client.get_databases()
-    for db in resp["DatabaseList"]:
-        db_name = db["Name"]
-        paginator = glue_client.get_paginator("get_tables")
-        for page in paginator.paginate(DatabaseName=db_name):
-            for table in page["TableList"]:
-                location = (
-                    table.get("StorageDescriptor", {}).get("Location", "")
-                )
-                if location.startswith(s3_prefix):
-                    matches.append((db_name, table["Name"]))
+    db_paginator = glue_client.get_paginator("get_databases")
+    for db_page in db_paginator.paginate():
+        for db in db_page["DatabaseList"]:
+            db_name = db["Name"]
+            table_paginator = glue_client.get_paginator("get_tables")
+            for table_page in table_paginator.paginate(DatabaseName=db_name):
+                for table in table_page["TableList"]:
+                    location = (
+                        table.get("StorageDescriptor", {}).get("Location", "")
+                    )
+                    if location.startswith(s3_prefix):
+                        matches.append((db_name, table["Name"]))
     return matches
 
 
