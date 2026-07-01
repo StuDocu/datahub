@@ -129,15 +129,19 @@ upsert_datahub_secret() {
     --arg name "$name" \
     --arg value "$value" \
     '{"query":"mutation($name:String!,$value:String!){upsertSecret(input:{name:$name,value:$value}){urn}}","variables":{"name":$name,"value":$value}}')
-  if curl -sf -X POST http://localhost:8080/api/graphql \
+  local response
+  response=$(curl -sf -X POST http://localhost:8080/api/graphql \
     -H "Authorization: Bearer $GMS_TOKEN" \
     -H "Content-Type: application/json" \
-    -d "$payload" \
-    > /dev/null; then
-    echo "✅ Secret upserted: $name"
-  else
-    echo "ERROR: Failed to upsert DataHub secret '$name'" >&2
+    -d "$payload")
+  if [ $? -ne 0 ]; then
+    echo "ERROR: Failed to upsert DataHub secret '$name' (HTTP error)" >&2
     SECRET_UPSERT_FAILED=1
+  elif echo "$response" | jq -e '.errors' > /dev/null 2>&1; then
+    echo "ERROR: GraphQL error upserting secret '$name': $(echo "$response" | jq -r '.errors[0].message')" >&2
+    SECRET_UPSERT_FAILED=1
+  else
+    echo "✅ Secret upserted: $name"
   fi
 }
 
