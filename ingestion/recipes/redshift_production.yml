@@ -1,0 +1,21 @@
+source:
+  type: redshift
+  config:
+    host_port: "production-studocu-datawarehouse.c3rc335oay5d.eu-west-1.redshift.amazonaws.com:5439"
+    database: production
+    username: "${REDSHIFT_USERNAME}"
+    password: "${REDSHIFT_PASSWORD}"
+    table_lineage_mode: stl_scan_based
+    include_table_lineage: true
+    include_tables: true
+    include_views: true
+    profiling:
+      enabled: true
+      profile_table_level_only: false
+      sample_size: 1000
+    stateful_ingestion:
+      enabled: true
+sink:
+  type: datahub-rest
+  config:
+    server: "http://datahub-gms:8080"
